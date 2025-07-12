@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const response = await getCurrentUser();
-          setUser(response.data.data);
+          setUser(response.data.message); // Updated to use message field
         } catch (error) {
           console.error("Failed to get user:", error);
           localStorage.removeItem("accessToken");
@@ -92,9 +92,8 @@ export const AuthProvider = ({ children }) => {
       const response = await loginApi(credentials.email, credentials.password);
       console.log("AuthContext - Login API response:", response.data); // Debug log
 
-      // The backend ApiResponse puts the actual data in 'data' field
-      // Structure: { status, message: "success message", data: { accessToken, user }, success }
-      const responseData = response.data.data;
+      // Based on your API response: { status, message: { accessToken, user }, data: "success text", success }
+      const responseData = response.data.message;
       console.log("AuthContext - Extracted responseData:", responseData); // Debug log
 
       const { accessToken, user: userData } = responseData;

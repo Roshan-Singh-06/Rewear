@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
@@ -8,38 +8,24 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login, user, isAuthenticated } = useAuth();
-
-  // Navigate to dashboard if user is already authenticated
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      console.log("User is authenticated, redirecting to dashboard"); // Debug log
-      navigate("/dashboard", { replace: true });
-    }
-  }, [isAuthenticated, user, navigate]);
+  const { login } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      console.log("Attempting login with:", { email, password: "***" }); // Debug log
-      const response = await login({ email, password });
+      const response = await login({ email, password }); // Pass email and password as object
       console.log("Login response:", response); // Debug log
-
-      // Login function in AuthContext should set the user state
-      // The useEffect above will handle navigation when user state changes
       toast.success("Login successful!");
+
+      // Add a small delay to ensure context is updated
+      setTimeout(() => {
+        navigate("/dashboard", { replace: true });
+      }, 100);
     } catch (error) {
       console.error("Login error:", error); // Debug log
-
-      // More detailed error handling
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Login failed - Please try again";
-
-      toast.error(errorMessage);
+      toast.error(error.response?.data?.message || "Login failed");
     } finally {
       setLoading(false);
     }

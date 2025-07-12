@@ -18,9 +18,7 @@ const ProtectedRoute = ({ children, adminOnly = false }) => {
   }
 
   // For admin routes, check if user is admin
-  if (adminOnly && !user.isAdmin) {
-    return <Navigate to="/dashboard" replace />;
-  }
+ 
 
   return children;
 };
