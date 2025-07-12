@@ -20,6 +20,7 @@ const Users = () => {
   useEffect(() => {
     fetchUsers();
   }, [currentPage, searchTerm, roleFilter]);
+
   const fetchUsers = async () => {
     try {
       setLoading(true);
@@ -31,10 +32,10 @@ const Users = () => {
       };
 
       const response = await getAllUsers(params);
-      console.log("API Response:", response.data); // Debug log
+      console.log("API Response:", response.data);
 
-      // The response structure is: response.data.users and response.data.pagination
-      const responseData = response.data;
+      // ✅ Updated: Users and pagination are in response.data.data
+      const responseData = response.data.data || {};
       const usersArray = responseData.users || [];
       const paginationData = responseData.pagination || {};
 
@@ -43,7 +44,7 @@ const Users = () => {
     } catch (error) {
       toast.error("Failed to fetch users");
       console.error("Error fetching users:", error);
-      setUsers([]); // Set empty array on error
+      setUsers([]);
       setPagination({});
     } finally {
       setLoading(false);
@@ -223,10 +224,8 @@ const Users = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {user.email}
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                      {user.email}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -237,17 +236,13 @@ const Users = () => {
                         {user.role}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
-                        {user.points || 0}
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 dark:text-indigo-400 font-semibold">
+                      {user.points || 0}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        <div>Items: {user.listedItems?.length || 0}</div>
-                        <div>Orders: {user.orders?.length || 0}</div>
-                        <div>Swaps: {user.swaps?.length || 0}</div>
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">
+                      <div>Items: {user.listedItems?.length || 0}</div>
+                      <div>Orders: {user.orders?.length || 0}</div>
+                      <div>Swaps: {user.swaps?.length || 0}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {user.createdAt
@@ -276,26 +271,6 @@ const Users = () => {
         {pagination && pagination.totalPages > 1 && (
           <div className="bg-white dark:bg-gray-800 px-4 py-3 border-t border-gray-200 dark:border-gray-700 sm:px-6">
             <div className="flex items-center justify-between">
-              <div className="flex-1 flex justify-between sm:hidden">
-                <button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={!pagination?.hasPrev}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Previous
-                </button>
-                <button
-                  onClick={() =>
-                    setCurrentPage(
-                      Math.min(pagination?.totalPages || 1, currentPage + 1)
-                    )
-                  }
-                  disabled={!pagination?.hasNext}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              </div>
               <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm text-gray-700 dark:text-gray-300">

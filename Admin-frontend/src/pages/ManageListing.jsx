@@ -4,7 +4,7 @@ import {
   getAllItems as getProducts,
   deleteItem as deleteProduct,
 } from "../services/api";
-import ListingViewModal from "../components/ListingViewModal";
+import Modal from "../components/Modal";
 import {
   EyeIcon,
   TrashIcon,
@@ -14,6 +14,8 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 
 const ManageListing = () => {
@@ -31,8 +33,10 @@ const ManageListing = () => {
   const fetchItems = async () => {
     try {
       const response = await getProducts({ page, search: keyword });
-      setItems(response.data.data.items || []);
-      setPages(response.data.data.pagination?.totalPages || 1);
+      const result = response.data?.data; // Access the nested data object
+      console.log("Fetched items:", result); // Debug log
+      setItems(result?.items || []);
+      setPages(result?.pagination?.totalPages || 1);
     } catch (error) {
       toast.error("Failed to fetch listings");
     } finally {
@@ -43,7 +47,7 @@ const ManageListing = () => {
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this listing?")) {
       try {
-        await deleteProduct(id); // Should be deleteItem in future
+        await deleteProduct(id);
         toast.success("Listing deleted successfully");
         fetchItems();
       } catch (error) {
@@ -95,7 +99,7 @@ const ManageListing = () => {
           >
             {/* Image Section */}
             <div className="relative h-48 bg-gray-100 dark:bg-gray-700">
-              {item.images && item.images.length > 0 ? (
+              {item.images?.length > 0 ? (
                 <div className="flex h-full">
                   <img
                     src={item.images[0]}
@@ -144,14 +148,12 @@ const ManageListing = () => {
 
             {/* Content Section */}
             <div className="p-6">
-              {/* Title */}
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 line-clamp-2">
                 {item.title}
               </h3>
 
-              {/* Details Grid */}
-              <div className="space-y-3 mb-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="space-y-3 mb-4 text-sm">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-gray-500 dark:text-gray-400 font-medium">
                       Category:
@@ -170,7 +172,7 @@ const ManageListing = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <span className="text-gray-500 dark:text-gray-400 font-medium">
                       Size:
@@ -189,21 +191,17 @@ const ManageListing = () => {
                   </div>
                 </div>
 
-                {/* Listed By */}
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2">
                   <UserIcon className="h-4 w-4 text-gray-400" />
                   <span className="text-gray-500 dark:text-gray-400">
                     Listed by:
                   </span>
                   <span className="text-gray-900 dark:text-white font-medium">
-                    {item.uploader && item.uploader.name
-                      ? item.uploader.name
-                      : "N/A"}
+                    {item.listedBy?.username || "N/A"}
                   </span>
                 </div>
 
-                {/* Created Date */}
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2">
                   <CalendarIcon className="h-4 w-4 text-gray-400" />
                   <span className="text-gray-500 dark:text-gray-400">
                     Created:
@@ -213,8 +211,7 @@ const ManageListing = () => {
                   </span>
                 </div>
 
-                {/* Approval Status */}
-                <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-2">
                   <ClockIcon className="h-4 w-4 text-gray-400" />
                   <span className="text-gray-500 dark:text-gray-400">
                     Approval:
@@ -269,11 +266,195 @@ const ManageListing = () => {
       )}
 
       {/* Modal */}
-      <ListingViewModal
+      <Modal
         isOpen={!!viewItem}
         onClose={() => setViewItem(null)}
-        item={viewItem}
-      />
+        maxWidth="max-w-4xl"
+      >
+        {viewItem && (
+          <div className="text-white">
+            {/* Header */}
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {viewItem.title}
+              </h2>
+              <div className="flex items-center gap-4 text-sm text-gray-300">
+                <div className="flex items-center gap-2">
+                  <UserIcon className="h-4 w-4" />
+                  <span>Listed by: {viewItem.listedBy?.username || "N/A"}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  <span>
+                    {new Date(viewItem.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {viewItem.approved ? (
+                    <CheckCircleIcon className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <XCircleIcon className="h-4 w-4 text-red-400" />
+                  )}
+                  <span
+                    className={
+                      viewItem.approved ? "text-green-400" : "text-red-400"
+                    }
+                  >
+                    {viewItem.approved ? "Approved" : "Pending Approval"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Images */}
+            {viewItem.images && viewItem.images.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-3">Images</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {viewItem.images.map((image, index) => (
+                    <div key={index} className="relative">
+                      <img
+                        src={image}
+                        alt={`${viewItem.title} - Image ${index + 1}`}
+                        className="w-full h-64 object-cover rounded-lg border border-gray-600"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-3">
+                  Basic Information
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-gray-400 font-medium">Category:</span>
+                    <p className="text-white mt-1">{viewItem.category}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium">
+                      SubCategory:
+                    </span>
+                    <p className="text-white mt-1">{viewItem.subCategory}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium">Size:</span>
+                    <p className="text-white mt-1">{viewItem.size}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium">
+                      Condition:
+                    </span>
+                    <p className="text-white mt-1">{viewItem.condition}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 font-medium">Status:</span>
+                    <span
+                      className={`ml-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                        viewItem.status === "available"
+                          ? "bg-green-100 text-green-800"
+                          : viewItem.status === "pending"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-blue-100 text-blue-800"
+                      }`}
+                    >
+                      {viewItem.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold mb-3">
+                  Additional Details
+                </h3>
+                <div className="space-y-3">
+                  {viewItem.brand && (
+                    <div>
+                      <span className="text-gray-400 font-medium">Brand:</span>
+                      <p className="text-white mt-1">{viewItem.brand}</p>
+                    </div>
+                  )}
+                  {viewItem.color && (
+                    <div>
+                      <span className="text-gray-400 font-medium">Color:</span>
+                      <p className="text-white mt-1">{viewItem.color}</p>
+                    </div>
+                  )}
+                  {viewItem.material && (
+                    <div>
+                      <span className="text-gray-400 font-medium">
+                        Material:
+                      </span>
+                      <p className="text-white mt-1">{viewItem.material}</p>
+                    </div>
+                  )}
+                  {viewItem.pointsCost && (
+                    <div>
+                      <span className="text-gray-400 font-medium">
+                        Points Cost:
+                      </span>
+                      <p className="text-white mt-1">
+                        {viewItem.pointsCost} points
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-400 font-medium">Created:</span>
+                    <p className="text-white mt-1">
+                      {new Date(viewItem.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  {viewItem.updatedAt !== viewItem.createdAt && (
+                    <div>
+                      <span className="text-gray-400 font-medium">
+                        Last Updated:
+                      </span>
+                      <p className="text-white mt-1">
+                        {new Date(viewItem.updatedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Description */}
+            {viewItem.description && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-3">Description</h3>
+                <p className="text-gray-300 leading-relaxed">
+                  {viewItem.description}
+                </p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t border-gray-700">
+              <button
+                onClick={() => setViewItem(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  handleDelete(viewItem._id);
+                  setViewItem(null);
+                }}
+                className="px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/30 rounded-lg transition-colors flex items-center gap-2"
+              >
+                <TrashIcon className="h-4 w-4" />
+                Delete Listing
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Pagination */}
       {pages > 1 && (

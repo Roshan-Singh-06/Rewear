@@ -90,13 +90,29 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const response = await loginApi(credentials.email, credentials.password);
-      const { accessToken, user: userData } = response.data.data;
+      console.log("AuthContext - Login API response:", response.data); // Debug log
+
+      // The backend ApiResponse puts the actual data in 'data' field
+      // Structure: { status, message: "success message", data: { accessToken, user }, success }
+      const responseData = response.data.data;
+      console.log("AuthContext - Extracted responseData:", responseData); // Debug log
+
+      const { accessToken, user: userData } = responseData;
+
+      if (!accessToken || !userData) {
+        console.error(
+          "AuthContext - Missing token or user data:",
+          responseData
+        );
+        throw new Error("Invalid login response - missing token or user data");
+      }
 
       // Store token and user data
       localStorage.setItem("accessToken", accessToken);
       localStorage.setItem("user", JSON.stringify(userData));
       setUser(userData);
 
+      console.log("AuthContext - Login successful, user set:", userData); // Debug log
       return response.data;
     } catch (error) {
       console.error(

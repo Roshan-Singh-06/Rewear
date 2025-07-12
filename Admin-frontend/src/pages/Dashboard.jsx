@@ -59,6 +59,11 @@ const Dashboard = () => {
   const [editingPoints, setEditingPoints] = useState(false);
   const [newPointValue, setNewPointValue] = useState(50);
 
+  // Add state for real-time data
+  const [recentUsers, setRecentUsers] = useState([]);
+  const [recentListings, setRecentListings] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+
   // Fetch dashboard data
   useEffect(() => {
     fetchDashboardData();
@@ -68,25 +73,97 @@ const Dashboard = () => {
     try {
       setIsLoading(true);
 
-      // Fetch data from APIs
+      // Check authentication before making API calls
+      const token = localStorage.getItem("accessToken");
+      const user = localStorage.getItem("user");
+
+      console.log("Dashboard - Auth check:", {
+        hasToken: !!token,
+        hasUser: !!user,
+        token: token ? `${token.substring(0, 20)}...` : null,
+        userRole: user ? JSON.parse(user).role : null,
+      });
+
+      if (!token) {
+        toast.error("No authentication token found. Please login.");
+        return;
+      }
+
+      // Check if user is admin
+      if (user) {
+        const userData = JSON.parse(user);
+        if (userData.role !== "admin") {
+          toast.error("Admin access required for dashboard.");
+          return;
+        }
+      }
+
+      // Fetch data from APIs with consistent response parsing
       const [usersResponse, ordersResponse, listingsResponse] =
         await Promise.all([
-          getAllUsers().catch(() => ({ data: { data: { users: [] } } })),
-          getAllOrders().catch(() => ({ data: { data: { orders: [] } } })),
-          getAllItems().catch(() => ({ data: { data: { items: [] } } })),
+          getAllUsers().catch(() => ({
+            data: { data: { users: [], pagination: {} } },
+          })),
+          getAllOrders().catch(() => ({
+            data: { data: { orders: [], pagination: {} } },
+          })),
+          getAllItems().catch(() => ({
+            data: { data: { items: [], pagination: {} } },
+          })),
         ]);
 
+      // Parse responses according to the updated API structure (data.data)
+      const usersData = usersResponse.data?.data || {};
+      const ordersData = ordersResponse.data?.data || {};
+      const listingsData = listingsResponse.data?.data || {};
+
+      console.log("Dashboard API Responses:", {
+        usersResponse: usersResponse.data,
+        ordersResponse: ordersResponse.data,
+        listingsResponse: listingsResponse.data,
+        usersData,
+        ordersData,
+        listingsData,
+      });
+
+      // Store the actual data arrays for real-time display
+      const users = usersData.users || [];
+      const orders = ordersData.orders || [];
+      const listings = listingsData.items || [];
+
+      // Update stats
       setStats({
-        totalUsers: usersResponse.data?.data?.users?.length || 0,
-        totalOrders: ordersResponse.data?.data?.orders?.length || 0,
-        totalListings: listingsResponse.data?.data?.items?.length || 0,
+        totalUsers: usersData.pagination?.totalUsers || users.length || 0,
+        totalOrders: ordersData.pagination?.totalOrders || orders.length || 0,
+        totalListings:
+          listingsData.pagination?.totalItems || listings.length || 0,
         swapPoints: localStorage.getItem("swapPoints")
           ? parseInt(localStorage.getItem("swapPoints"))
           : 50,
       });
+
+      // Update real-time data (get recent 5 items)
+      setRecentUsers(users.slice(0, 5));
+      setRecentListings(listings.slice(0, 5));
+      setRecentOrders(orders.slice(0, 5));
+
+      console.log("Dashboard Data:", {
+        users: usersData,
+        orders: ordersData,
+        listings: listingsData,
+      });
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
-      toast.error("Failed to load dashboard data");
+      console.error("Error response:", error.response?.data);
+      console.error("Error status:", error.response?.status);
+
+      if (error.response?.status === 401) {
+        toast.error("Authentication required. Please login again.");
+      } else if (error.response?.status === 403) {
+        toast.error("Access denied. Admin privileges required.");
+      } else {
+        toast.error("Failed to load dashboard data");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -212,93 +289,31 @@ const Dashboard = () => {
     ],
   };
 
-  // Recent swaps with detailed information
-  const recentSwaps = [
-    {
-      id: 1,
-      from: "Sarah Wilson",
-      to: "Emma Davis",
-      fromItem: "Vintage Denim Jacket",
-      toItem: "Designer Handbag",
-      status: "Accepted",
-      date: "2024-03-10 14:30",
-      type: "Item Swap",
-    },
-    {
-      id: 2,
-      from: "Michael Chen",
-      to: "ReWear Store",
-      fromItem: "Nike Sneakers",
-      toItem: "Store Credit",
-      status: "Completed",
-      date: "2024-03-10 13:45",
-      type: "Point Redemption",
-    },
-    {
-      id: 3,
-      from: "Lisa Johnson",
-      to: "Alex Rodriguez",
-      fromItem: "Summer Dress",
-      toItem: "Casual Blazer",
-      status: "Cancelled",
-      date: "2024-03-10 12:15",
-      type: "Item Swap",
-    },
-    {
-      id: 4,
-      from: "David Kim",
-      to: "ReWear Store",
-      fromItem: "Running Shoes",
-      toItem: "Store Credit",
-      status: "Accepted",
-      date: "2024-03-10 11:30",
-      type: "Point Redemption",
-    },
-  ];
+  // Create dynamic recent activity from actual data
+  const recentSwaps = recentOrders.map((order, index) => ({
+    id: order._id || index,
+    from: order.requester?.username || "Unknown User",
+    to: order.responder?.username || "System",
+    fromItem: order.itemOffered?.title || order.item?.title || "Item",
+    toItem: order.itemRequested?.title || "Points/Credits",
+    status: order.status || "pending",
+    date: order.createdAt ? new Date(order.createdAt).toLocaleString() : "N/A",
+    type: order.orderType === "swap" ? "Item Swap" : "Point Redemption",
+  }));
 
-  // Top listed items with detailed metrics
-  const topListings = [
-    {
-      id: 1,
-      name: "Vintage Leather Jacket",
-      category: "Outerwear",
-      views: 234,
-      swaps: 5,
-      condition: "Good",
-      size: "M",
-      uploader: "Sarah W.",
-    },
-    {
-      id: 2,
-      name: "Designer Handbag",
-      category: "Accessories",
-      views: 186,
-      swaps: 3,
-      condition: "Excellent",
-      size: "One Size",
-      uploader: "Emma D.",
-    },
-    {
-      id: 3,
-      name: "Casual Sneakers",
-      category: "Shoes",
-      views: 345,
-      swaps: 8,
-      condition: "Fair",
-      size: "9",
-      uploader: "Mike C.",
-    },
-    {
-      id: 4,
-      name: "Summer Maxi Dress",
-      category: "Dresses",
-      views: 145,
-      swaps: 2,
-      condition: "Good",
-      size: "L",
-      uploader: "Lisa J.",
-    },
-  ];
+  // Create dynamic top listings from actual data
+  const topListings = recentListings.map((item, index) => ({
+    id: item._id || index,
+    name: item.title || "Untitled Item",
+    category: item.category || "Unknown",
+    views: Math.floor(Math.random() * 300) + 50, // Random views for demo
+    swaps: Math.floor(Math.random() * 10), // Random swaps for demo
+    condition: item.condition || "Good",
+    size: item.size || "N/A",
+    uploader: item.listedBy?.username || "Unknown User",
+    status: item.status || "available",
+    approved: item.approved || false,
+  }));
 
   // User activity metrics
   const userMetrics = {
@@ -667,53 +682,68 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {recentSwaps.map((swap) => (
-                  <tr
-                    key={swap.id}
-                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        {swap.from}
+                {recentSwaps && recentSwaps.length > 0 ? (
+                  recentSwaps.map((swap) => (
+                    <tr
+                      key={swap.id}
+                      className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          {swap.from}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {swap.fromItem}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          {swap.to}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {swap.toItem}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            swap.type === "Item Swap"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                              : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                          }`}
+                        >
+                          {swap.type}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            swap.status === "completed"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : swap.status === "confirmed" ||
+                                swap.status === "pending"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                          }`}
+                        >
+                          {swap.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="px-6 py-12 text-center">
+                      <div className="text-gray-500 dark:text-gray-400">
+                        <ShoppingCartIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                        <p>No recent swaps found</p>
+                        <p className="text-sm">
+                          Swaps and orders will appear here
+                        </p>
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {swap.fromItem}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        {swap.to}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {swap.toItem}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          swap.type === "Item Swap"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                            : "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
-                        }`}
-                      >
-                        {swap.type}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          swap.status === "Completed"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : swap.status === "Accepted"
-                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
-                        {swap.status}
-                      </span>
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -737,49 +767,130 @@ const Dashboard = () => {
             </div>
           </div>
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {topListings.map((listing) => (
-              <div
-                key={listing.id}
-                className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {listing.name}
-                      </p>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {listing.views} views
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {listing.category} • Size {listing.size}
-                      </p>
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          listing.condition === "Excellent"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : listing.condition === "Good"
-                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                            : "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
-                        }`}
-                      >
-                        {listing.condition}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-xs text-gray-500 dark:text-gray-400">
-                        By {listing.uploader}
-                      </span>
-                      <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                        {listing.swaps} swaps
-                      </span>
+            {topListings && topListings.length > 0 ? (
+              topListings.map((listing) => (
+                <div
+                  key={listing.id}
+                  className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {listing.name}
+                        </p>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          {listing.views} views
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {listing.category} • Size {listing.size}
+                        </p>
+                        <span
+                          className={`px-2 py-1 text-xs rounded-full ${
+                            listing.condition === "Excellent"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                              : listing.condition === "Good"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
+                          }`}
+                        >
+                          {listing.condition}
+                        </span>
+                        {listing.approved && (
+                          <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                            Approved
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-3">
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          By {listing.uploader}
+                        </span>
+                        <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                          {listing.swaps} swaps
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="p-12 text-center">
+                <ShoppingBagIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-500 dark:text-gray-400 mb-1">
+                  No listings found
+                </p>
+                <p className="text-sm text-gray-400">
+                  Popular items will appear here
+                </p>
               </div>
-            ))}
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Users Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Recent Users
+            </h3>
+            <span className="text-sm text-gray-500 dark:text-gray-400">
+              {stats.totalUsers} total users
+            </span>
+          </div>
+          <div className="space-y-4">
+            {recentUsers.length > 0 ? (
+              recentUsers.map((user) => (
+                <div
+                  key={user._id}
+                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center">
+                      <span className="text-sm font-medium text-white">
+                        {user.username?.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900 dark:text-white">
+                        {user.username}
+                      </h4>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {user.email}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span
+                        className={`px-2 py-1 text-xs rounded-full ${
+                          user.role === "admin"
+                            ? "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400"
+                            : "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                        }`}
+                      >
+                        {user.role}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div>Points: {user.points || 0}</div>
+                      <div>Items: {user.listedItems?.length || 0}</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <UsersIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-500 dark:text-gray-400">
+                  No recent users found
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
