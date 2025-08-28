@@ -100,6 +100,16 @@ class AuthService {
       method: 'GET',
     });
   }
+
+  static async uploadProfilePicture(formData) {
+    return this.makeRequest(API_ENDPOINTS.AUTH.UPLOAD_PROFILE_PICTURE, {
+      method: 'POST',
+      data: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
 }
 
 export default AuthService;

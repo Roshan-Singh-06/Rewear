@@ -196,6 +196,56 @@ const updateSwapPoints = asyncHandler(async (req, res) => {
   );
 });
 
+// Approve item
+const approveItem = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const item = await Item.findById(id);
+  
+  if (!item) {
+    throw new ApiError(404, "Item not found");
+  }
+
+  if (item.approved) {
+    throw new ApiError(400, "Item is already approved");
+  }
+
+  const updatedItem = await Item.findByIdAndUpdate(
+    id,
+    { approved: true },
+    { new: true }
+  ).populate('listedBy', 'username email');
+
+  res.status(200).json(
+    new ApiResponse(200, updatedItem, "Item approved successfully")
+  );
+});
+
+// Reject item
+const rejectItem = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const item = await Item.findById(id);
+  
+  if (!item) {
+    throw new ApiError(404, "Item not found");
+  }
+
+  if (!item.approved) {
+    throw new ApiError(400, "Item is already rejected/pending");
+  }
+
+  const updatedItem = await Item.findByIdAndUpdate(
+    id,
+    { approved: false },
+    { new: true }
+  ).populate('listedBy', 'username email');
+
+  res.status(200).json(
+    new ApiResponse(200, updatedItem, "Item rejected successfully")
+  );
+});
+
 module.exports = {
   getAllUsers,
   deleteUser,
@@ -203,4 +253,6 @@ module.exports = {
   getAllOrders,
   getSwapPoints,
   updateSwapPoints,
+  approveItem,
+  rejectItem,
 };

@@ -12,8 +12,10 @@ const {
   refreshToken,
   updateProfile,
   getProfileStatus,
+  uploadProfilePicture,
 } = require("../controllers/user.controller");
 const verifyJWT = require("../middlewares/auth.middleware");
+const { upload } = require("../middlewares/multer.middleware");
 
 // Authentication Routes
 router.post("/register", registerUser); // Register a new user
@@ -32,6 +34,7 @@ router.post("/refresh-token", refreshToken); // Refresh access token
 router.get("/profile", verifyJWT, getCurrentUser); // Get current user profile
 router.put("/profile", verifyJWT, updateProfile); // Update user profile
 router.get("/profile/status", verifyJWT, getProfileStatus); // Get profile completion status
+router.post("/profile/upload-picture", verifyJWT, upload.single("profilePicture"), uploadProfilePicture); // Upload profile picture
 
 module.exports = router;
  

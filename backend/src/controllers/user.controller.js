@@ -2,6 +2,7 @@ const asynchandler = require("../utils/asynchandler");
 const User = require("../models/User.model");
 const apiError = require("../utils/apiError");
 const ApiResponse = require("../utils/apiResponse");
+const { uploadOnCloudinary } = require("../utils/cloudinary");
 const {
   generateOTP,
   sendOTPEmail,
@@ -33,7 +34,7 @@ const registerUser = asynchandler(async (req, res) => {
   }
 
   // Check if trying to create admin user
-  if (role === 'admin') {
+  if (role === "admin") {
     // Check if admin secret is provided and matches environment variable
     const ADMIN_SECRET = process.env.ADMIN_REGISTRATION_SECRET;
     if (!ADMIN_SECRET) {
@@ -60,7 +61,7 @@ const registerUser = asynchandler(async (req, res) => {
     username: username.toLowerCase(),
     email,
     password,
-    role: role === 'admin' ? 'admin' : 'user', // Only allow admin if secret provided
+    role: role === "admin" ? "admin" : "user", // Only allow admin if secret provided
     otp: emailOtp,
     otpExpiry: emailOtpExpiry,
     isEmailVerified: false, // Require email verification
@@ -68,7 +69,7 @@ const registerUser = asynchandler(async (req, res) => {
 
   // Send OTP email
   const emailSent = await sendOTPEmail(email, emailOtp, "verification");
-
+  console.log(emailSent);
   if (!emailSent) {
     throw new apiError(500, "Failed to send verification email");
   }
@@ -82,8 +83,8 @@ const registerUser = asynchandler(async (req, res) => {
     .json(
       new ApiResponse(
         201,
-        "User registered successfully. Please check your email for verification OTP.",
-        createdUser
+        createdUser,
+        "User registered successfully. Please check your email for verification OTP."
       )
     );
 });
@@ -122,7 +123,13 @@ const verifyEmailOTP = asynchandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, "Email verified successfully", { emailVerified: true }));
+    .json(
+      new ApiResponse(
+        200,
+        { emailVerified: true },
+        "Email verified successfully"
+      )
+    );
 });
 
 // Resend Email Verification OTP
@@ -158,7 +165,13 @@ const resendEmailOTP = asynchandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, "Verification OTP sent successfully", { emailSent: true }));
+    .json(
+      new ApiResponse(
+        200,
+        { emailSent: true },
+        "Verification OTP sent successfully"
+      )
+    );
 });
 
 // Login User with Password
@@ -201,11 +214,10 @@ const loginUser = asynchandler(async (req, res) => {
     .cookie("refreshToken", refreshToken, options)
     .cookie("accessToken", accessToken, options)
     .json(
-      new ApiResponse(
-        200,
-        { accessToken, user: loggedInUser },
-        "User logged in successfully"
-      )
+      new ApiResponse(200, "User logged in successfully", {
+        accessToken,
+        user: loggedInUser,
+      })
     );
 });
 
@@ -242,7 +254,7 @@ const sendLoginOTP = asynchandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200,  "Login OTP sent successfully"));
+    .json(new ApiResponse(200, "Login OTP sent successfully"));
 });
 
 // Login with OTP
@@ -322,7 +334,7 @@ const logoutUser = asynchandler(async (req, res) => {
     .status(200)
     .clearCookie("refreshToken", options)
     .clearCookie("accessToken", options)
-    .json(new ApiResponse(200,  "User logged out successfully"));
+    .json(new ApiResponse(200, "User logged out successfully"));
 });
 
 // Get Current User
@@ -330,7 +342,7 @@ const getCurrentUser = asynchandler(async (req, res) => {
   const user = await User.findById(req.user._id)
     .select("-password -refresh_token")
     .lean();
-  return res.status(200).json(new ApiResponse(200, "User details", user));
+  return res.status(200).json(new ApiResponse(200, user, "User details"));
 });
 
 // Refresh Token
@@ -388,10 +400,10 @@ const refreshToken = asynchandler(async (req, res) => {
 
 // Update user profile
 const updateProfile = asynchandler(async (req, res) => {
-  const { fullName, phoneNumber, address, state, country, pinCode } = req.body;
-  
+  const { fullName, phoneNumber, address, state, country, pinCode, district, city, latitude, longitude, profilePicture } = req.body;
+
   const userId = req.user._id;
-  
+
   // Build update object with only provided fields
   const updateData = {};
   if (fullName !== undefined) updateData.fullName = fullName;
@@ -400,45 +412,54 @@ const updateProfile = asynchandler(async (req, res) => {
   if (state !== undefined) updateData.state = state;
   if (country !== undefined) updateData.country = country;
   if (pinCode !== undefined) updateData.pinCode = pinCode;
-  
+  if (district !== undefined) updateData.district = district;
+  if (city !== undefined) updateData.city = city;
+  if (latitude !== undefined) updateData.latitude = latitude;
+  if (longitude !== undefined) updateData.longitude = longitude;
+  if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
+
   // First, update the user with the new data
-  const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    updateData,
-    { new: true, runValidators: true }
-  );
-  
+  const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+    new: true,
+    runValidators: true,
+  });
+
   if (!updatedUser) {
     throw new apiError(404, "User not found");
   }
-  
+
   // Manually check and update profile completion status
-  const isComplete = updatedUser.fullName && 
-                    updatedUser.phoneNumber && 
-                    updatedUser.address && 
-                    updatedUser.state && 
-                    updatedUser.country && 
-                    updatedUser.pinCode &&
-                    updatedUser.isEmailVerified;
-  
+  const isComplete =
+    updatedUser.fullName &&
+    updatedUser.phoneNumber &&
+    updatedUser.address &&
+    updatedUser.state &&
+    updatedUser.country &&
+    updatedUser.pinCode &&
+    updatedUser.district &&
+    updatedUser.city &&
+    updatedUser.isEmailVerified;
+
   // Update the isProfileComplete field if it changed
   if (updatedUser.isProfileComplete !== isComplete) {
     updatedUser.isProfileComplete = isComplete;
     await updatedUser.save();
   }
-  
+
   // Return user without sensitive fields
-  const userResponse = await User.findById(userId).select("-password -refresh_token -otp -otpExpiry");
-  
-  res.status(200).json(
-    new ApiResponse(200, "Profile updated successfully", userResponse)
+  const userResponse = await User.findById(userId).select(
+    "-password -refresh_token -otp -otpExpiry"
   );
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, userResponse, "Profile updated successfully"));
 });
 
 // Get profile completion status
 const getProfileStatus = asynchandler(async (req, res) => {
   const user = req.user;
-  
+
   const requiredFields = {
     fullName: !!user.fullName,
     phoneNumber: !!user.phoneNumber,
@@ -446,33 +467,46 @@ const getProfileStatus = asynchandler(async (req, res) => {
     state: !!user.state,
     country: !!user.country,
     pinCode: !!user.pinCode,
-    isEmailVerified: user.isEmailVerified
+    district: !!user.district,
+    city: !!user.city,
+    isEmailVerified: user.isEmailVerified,
   };
-  
+
   const completedFields = Object.values(requiredFields).filter(Boolean).length;
   const totalFields = Object.keys(requiredFields).length;
-  const completionPercentage = Math.round((completedFields / totalFields) * 100);
-  
-  const missingFields = Object.keys(requiredFields).filter(
-    field => !requiredFields[field]
+  const completionPercentage = Math.round(
+    (completedFields / totalFields) * 100
   );
-  
+
+  const missingFields = Object.keys(requiredFields).filter(
+    (field) => !requiredFields[field]
+  );
+
   res.status(200).json(
-    new ApiResponse(200, {
-      isComplete: user.isProfileComplete,
-      completionPercentage,
-      requiredFields,
-      missingFields,
-      user: {
-        fullName: user.fullName,
-        phoneNumber: user.phoneNumber,
-        address: user.address,
-        state: user.state,
-        country: user.country,
-        pinCode: user.pinCode,
-        isEmailVerified: user.isEmailVerified
-      }
-    }, "Profile status retrieved successfully")
+    new ApiResponse(
+      200,
+      {
+        isComplete: user.isProfileComplete,
+        completionPercentage,
+        requiredFields,
+        missingFields,
+        user: {
+          fullName: user.fullName,
+          phoneNumber: user.phoneNumber,
+          address: user.address,
+          state: user.state,
+          country: user.country,
+          pinCode: user.pinCode,
+          district: user.district,
+          city: user.city,
+          latitude: user.latitude,
+          longitude: user.longitude,
+          profilePicture: user.profilePicture,
+          isEmailVerified: user.isEmailVerified,
+        },
+      },
+      "Profile status retrieved successfully"
+    )
   );
 });
 
@@ -481,15 +515,21 @@ const registerAdmin = asynchandler(async (req, res) => {
   const { username, email, password, adminSecret } = req.body;
 
   if (!username || !email || !password || !adminSecret) {
-    throw new apiError(400, "Please provide all required details including admin secret");
+    throw new apiError(
+      400,
+      "Please provide all required details including admin secret"
+    );
   }
 
   // Check admin secret
   const ADMIN_SECRET = process.env.ADMIN_REGISTRATION_SECRET;
   if (!ADMIN_SECRET) {
-    throw new apiError(403, "Admin registration is not enabled. Set ADMIN_REGISTRATION_SECRET in environment variables.");
+    throw new apiError(
+      403,
+      "Admin registration is not enabled. Set ADMIN_REGISTRATION_SECRET in environment variables."
+    );
   }
-  
+
   if (adminSecret !== ADMIN_SECRET) {
     throw new apiError(403, "Invalid admin secret");
   }
@@ -510,7 +550,7 @@ const registerAdmin = asynchandler(async (req, res) => {
     username: username.toLowerCase(),
     email,
     password,
-    role: 'admin',
+    role: "admin",
     otp: emailOtp,
     otpExpiry: emailOtpExpiry,
     isEmailVerified: false, // Require email verification
@@ -538,6 +578,53 @@ const registerAdmin = asynchandler(async (req, res) => {
     );
 });
 
+// Upload profile picture
+const uploadProfilePicture = asynchandler(async (req, res) => {
+  try {
+    if (!req.file) {
+      throw new apiError(400, "Profile picture is required");
+    }
+
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      throw new apiError(404, "User not found");
+    }
+
+    // Upload to cloudinary
+    const uploadResult = await uploadOnCloudinary(
+      req.file.buffer,
+      `profile_${userId}_${Date.now()}`
+    );
+
+    if (!uploadResult) {
+      throw new apiError(500, "Failed to upload profile picture");
+    }
+
+    // Update user profile picture
+    user.profilePicture = uploadResult.secure_url;
+    await user.save();
+
+    const userResponse = await User.findById(userId).select(
+      "-password -refresh_token -otp -otpExpiry"
+    );
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        { 
+          profilePicture: uploadResult.secure_url,
+          user: userResponse 
+        },
+        "Profile picture uploaded successfully"
+      )
+    );
+  } catch (error) {
+    throw new apiError(500, error.message || "Failed to upload profile picture");
+  }
+});
+
 module.exports = {
   registerUser,
   verifyEmailOTP,
@@ -551,4 +638,5 @@ module.exports = {
   updateProfile,
   getProfileStatus,
   registerAdmin,
+  uploadProfilePicture,
 };

@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import {
   getAllItems as getProducts,
   deleteItem as deleteProduct,
+  approveItem,
+  rejectItem,
 } from "../services/api";
 import Modal from "../components/Modal";
 import {
@@ -26,11 +28,7 @@ const ManageListing = () => {
   const [keyword, setKeyword] = useState("");
   const [viewItem, setViewItem] = useState(null);
 
-  useEffect(() => {
-    fetchItems();
-  }, [page, keyword]);
-
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     try {
       const response = await getProducts({ page, search: keyword });
       const result = response.data?.data; // Access the nested data object
@@ -42,7 +40,11 @@ const ManageListing = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, keyword]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
   const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this listing?")) {
@@ -52,6 +54,30 @@ const ManageListing = () => {
         fetchItems();
       } catch (error) {
         toast.error("Failed to delete listing");
+      }
+    }
+  };
+
+  const handleApprove = async (id) => {
+    if (window.confirm("Are you sure you want to approve this listing?")) {
+      try {
+        await approveItem(id);
+        toast.success("Listing approved successfully");
+        fetchItems();
+      } catch (error) {
+        toast.error("Failed to approve listing");
+      }
+    }
+  };
+
+  const handleReject = async (id) => {
+    if (window.confirm("Are you sure you want to reject this listing?")) {
+      try {
+        await rejectItem(id);
+        toast.success("Listing rejected successfully");
+        fetchItems();
+      } catch (error) {
+        toast.error("Failed to reject listing");
       }
     }
   };
@@ -229,17 +255,36 @@ const ManageListing = () => {
               </div>
 
               {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   onClick={() => setViewItem(item)}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
                 >
                   <EyeIcon className="h-4 w-4" />
                   View
                 </button>
+                
+                {!item.approved ? (
+                  <button
+                    onClick={() => handleApprove(item._id)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 rounded-lg transition-colors"
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                    Approve
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleReject(item._id)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-400 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                  >
+                    <XCircleIcon className="h-4 w-4" />
+                    Reject
+                  </button>
+                )}
+                
                 <button
                   onClick={() => handleDelete(item._id)}
-                  className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                  className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                 >
                   <TrashIcon className="h-4 w-4" />
                   Delete

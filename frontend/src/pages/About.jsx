@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Navbar from './components/Navbar';
 
-export default function About({ onLogout }) {
+export default function About() {
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -122,7 +122,7 @@ export default function About({ onLogout }) {
 
   return (
     <div className="min-h-screen bg-white">
-      <Navbar onLogout={onLogout} />
+      <Navbar />
       
       {/* Hero Section */}
       <motion.section 

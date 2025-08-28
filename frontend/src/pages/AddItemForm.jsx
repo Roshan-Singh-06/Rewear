@@ -1,32 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Camera, X, Plus, Upload, Tag, Shirt, Package, Star, Users, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import ItemService from '../services/itemService';
 
 export default function AddItemForm() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const editItem = location.state?.editItem;
+  const isEditing = !!editItem;
+
   const [images, setImages] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     category: '',
-    type: '',
+    subCategory: '',
     size: '',
     condition: '',
-    tags: [],
-    brand: '',
-    color: '',
-    price: ''
+    pointsCost: ''
   });
   const [dragOver, setDragOver] = useState(false);
-  const [currentTag, setCurrentTag] = useState('');
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  // Load edit data when component mounts
+  useEffect(() => {
+    if (editItem) {
+      setFormData({
+        title: editItem.title || '',
+        description: editItem.description || '',
+        category: editItem.category || '',
+        subCategory: editItem.subCategory || '',
+        size: editItem.size || '',
+        condition: editItem.condition || '',
+        pointsCost: editItem.pointsCost?.toString() || ''
+      });
+      
+      // Load existing images
+      if (editItem.images && editItem.images.length > 0) {
+        const existingImages = editItem.images.map((url, index) => ({
+          id: Date.now() + index,
+          url: url,
+          isExisting: true
+        }));
+        setImages(existingImages);
+      }
+    }
+  }, [editItem]);
 
   const categories = [
-    'Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Shoes', 
-    'Accessories', 'Bags', 'Jewelry', 'Activewear', 'Formal'
+    'Men', 'Women', 'Kids'
+  ];
+
+  const subCategories = [
+    'casual', 'formal', 'party', 'sports', 'wedding', 'other'
   ];
 
   const conditions = [
-    'Like New', 'Excellent', 'Good', 'Fair', 'Worn'
+    'new', 'like-new', 'good', 'fair', 'worn'
   ];
 
   const sizes = [
@@ -35,7 +66,7 @@ export default function AddItemForm() {
   ];
 
   const handleImageUpload = (files) => {
-    const newImages = Array.from(files).slice(0, 6 - images.length);
+    const newImages = Array.from(files).slice(0, 5 - images.length);
     const imageUrls = newImages.map(file => ({
       id: Date.now() + Math.random(),
       url: URL.createObjectURL(file),
@@ -60,29 +91,111 @@ export default function AddItemForm() {
       ...prev,
       [field]: value
     }));
-  };
-
-  const addTag = () => {
-    if (currentTag.trim() && !formData.tags.includes(currentTag.trim())) {
-      setFormData(prev => ({
+    // Clear error for this field
+    if (errors[field]) {
+      setErrors(prev => ({
         ...prev,
-        tags: [...prev.tags, currentTag.trim()]
+        [field]: ''
       }));
-      setCurrentTag('');
     }
   };
 
-  const removeTag = (tagToRemove) => {
-    setFormData(prev => ({
-      ...prev,
-      tags: prev.tags.filter(tag => tag !== tagToRemove)
-    }));
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.title.trim()) newErrors.title = 'Title is required';
+    if (!formData.description.trim()) newErrors.description = 'Description is required';
+    if (!formData.category) newErrors.category = 'Category is required';
+    if (!formData.subCategory) newErrors.subCategory = 'Sub-category is required';
+    if (!formData.size) newErrors.size = 'Size is required';
+    if (!formData.condition) newErrors.condition = 'Condition is required';
+    if (!formData.pointsCost || formData.pointsCost < 0) newErrors.pointsCost = 'Valid points cost is required';
+    
+    // For editing, we don't require new images since they might keep existing ones
+    const hasNewImages = images.some(img => img.file && img.file instanceof File);
+    const hasExistingImages = isEditing && editItem?.images?.length > 0;
+    
+    if (!hasNewImages && !hasExistingImages) {
+      newErrors.images = 'At least one image is required';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Form submitted:', { formData, images });
-    // Handle form submission here
+    
+    if (!validateForm()) return;
+    
+    setLoading(true);
+    try {
+      // Ensure we have valid images for new items, or keep existing for edits
+      const validImageFiles = images
+        .filter(img => img.file && img.file instanceof File)
+        .map(img => img.file);
+      
+      if (!isEditing && validImageFiles.length === 0) {
+        alert('Please upload at least one image');
+        setLoading(false);
+        return;
+      }
+      
+      // Create FormData
+      const submitFormData = new FormData();
+      
+      // Add text fields
+      submitFormData.append('title', formData.title.trim());
+      submitFormData.append('description', formData.description.trim());
+      submitFormData.append('category', formData.category);
+      submitFormData.append('subCategory', formData.subCategory);
+      submitFormData.append('size', formData.size);
+      submitFormData.append('condition', formData.condition);
+      submitFormData.append('pointsCost', Number(formData.pointsCost));
+      
+      // Add new image files only
+      validImageFiles.forEach((file, index) => {
+        submitFormData.append('images', file);
+        console.log(`Added image ${index}:`, file.name, file.size);
+      });
+      
+      // Debug: Log all FormData entries before sending
+      console.log('FormData entries before sending:');
+      for (let [key, value] of submitFormData.entries()) {
+        if (value instanceof File) {
+          console.log(`${key}: File(${value.name}, ${value.size} bytes, ${value.type})`);
+        } else {
+          console.log(`${key}: ${value}`);
+        }
+      }
+      
+      let response;
+      if (isEditing) {
+        response = await ItemService.updateItem(editItem._id, submitFormData);
+      } else {
+        response = await ItemService.createItemWithFormData(submitFormData);
+      }
+      
+      if (response.success) {
+        alert(`Item ${isEditing ? 'updated' : 'created'} successfully!`);
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error(`Error ${isEditing ? 'updating' : 'creating'} item:`, error);
+      
+      // Better error handling to see the exact backend error
+      let errorMessage = `Failed to ${isEditing ? 'update' : 'create'} item. Please try again.`;
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleArrow = () => {
@@ -118,8 +231,15 @@ export default function AddItemForm() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">List a New Item</h2>
-          <p className="text-gray-600">Share your preloved fashion and earn points for sustainable swapping</p>
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">
+            {isEditing ? 'Edit Item' : 'List a New Item'}
+          </h2>
+          <p className="text-gray-600">
+            {isEditing 
+              ? 'Update your item details and make changes as needed'
+              : 'Share your preloved fashion and earn points for sustainable swapping'
+            }
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -129,7 +249,7 @@ export default function AddItemForm() {
               <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
                 <h3 className="text-xl font-semibold mb-4 flex items-center">
                   <Camera className="h-5 w-5 mr-2 text-black-600" />
-                  Photos ({images.length}/6)
+                  Photos ({images.length}/5)
                 </h3>
                 
                 <div
@@ -137,7 +257,7 @@ export default function AddItemForm() {
                     dragOver 
                       ? 'border-black-500 bg-gray-100' 
                       : 'border-gray-300 hover:border-black-500 hover:bg-gray-50'
-                  } ${images.length >= 6 ? 'opacity-50 pointer-events-none' : ''}`}
+                  } ${images.length >= 5 ? 'opacity-50 pointer-events-none' : ''}`}
                   onDrop={handleDrop}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}
@@ -152,7 +272,7 @@ export default function AddItemForm() {
                     onChange={(e) => handleImageUpload(e.target.files)}
                     className="hidden"
                     id="image-upload"
-                    disabled={images.length >= 6}
+                    disabled={images.length >= 5}
                   />
                   <label
                     htmlFor="image-upload"
@@ -187,6 +307,7 @@ export default function AddItemForm() {
                     ))}
                   </div>
                 )}
+                {errors.images && <p className="text-red-500 text-sm mt-1">{errors.images}</p>}
               </div>
 
               {/* Previous Listings Preview */}
@@ -222,6 +343,7 @@ export default function AddItemForm() {
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
                       placeholder="e.g., Vintage Levi's Denim Jacket"
                     />
+                    {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -237,6 +359,7 @@ export default function AddItemForm() {
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
                       </select>
+                      {errors.category && <p className="text-red-500 text-sm mt-1">{errors.category}</p>}
                     </div>
 
                     <div>
@@ -251,30 +374,7 @@ export default function AddItemForm() {
                           <option key={size} value={size}>{size}</option>
                         ))}
                       </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                      <input
-                        type="text"
-                        value={formData.brand}
-                        onChange={(e) => handleInputChange('brand', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-                        placeholder="e.g., Zara, H&M, Uniqlo"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
-                      <input
-                        type="text"
-                        value={formData.color}
-                        onChange={(e) => handleInputChange('color', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-                        placeholder="e.g., Navy Blue, Black"
-                      />
+                      {errors.size && <p className="text-red-500 text-sm mt-1">{errors.size}</p>}
                     </div>
                   </div>
 
@@ -296,6 +396,7 @@ export default function AddItemForm() {
                         </button>
                       ))}
                     </div>
+                    {errors.condition && <p className="text-red-500 text-sm mt-1">{errors.condition}</p>}
                   </div>
 
                   <div>
@@ -307,43 +408,36 @@ export default function AddItemForm() {
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors resize-none"
                       placeholder="Describe the item's condition, style, fit, and any unique features..."
                     />
+                    {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {formData.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm flex items-center"
-                        >
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => removeTag(tag)}
-                            className="ml-2 bg-gradient-to-br from-gray-300 via-gray-800 to-black"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={currentTag}
-                        onChange={(e) => setCurrentTag(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                        className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
-                        placeholder="Add tags like 'vintage', 'casual', 'summer'"
-                      />
-                      <button
-                        type="button"
-                        onClick={addTag}
-                        className="px-4 py-3 text-white rounded-lg transition-colors bg-gradient-to-br from-gray-300 via-gray-800 to-black"
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Sub-Category *</label>
+                      <select
+                        value={formData.subCategory}
+                        onChange={(e) => handleInputChange('subCategory', e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
                       >
-                        <Plus className="h-4 w-4" />
-                      </button>
+                        <option value="">Select Sub-Category</option>
+                        {subCategories.map(subCat => (
+                          <option key={subCat} value={subCat}>{subCat}</option>
+                        ))}
+                      </select>
+                      {errors.subCategory && <p className="text-red-500 text-sm mt-1">{errors.subCategory}</p>}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Points Cost *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.pointsCost}
+                        onChange={(e) => handleInputChange('pointsCost', e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                        placeholder="Enter points cost for this item"
+                      />
+                      {errors.pointsCost && <p className="text-red-500 text-sm mt-1">{errors.pointsCost}</p>}
                     </div>
                   </div>
                 </div>
@@ -360,20 +454,16 @@ export default function AddItemForm() {
                 </div>
                 <p className="text-gray-600 mb-6">Your item will be reviewed and approved within 24 hours.</p>
                 
-                <div className="flex gap-4">
-                  <button
-                    type="button"
-                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    Save as Draft
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-6 py-3 bg-gradient-to-r bg-gradient-to-br from-gray-500 via-gray-800 to-black text-white rounded-lg transition-colors font-medium"
-                  >
-                    List Item
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full px-6 py-3 bg-gradient-to-r bg-gradient-to-br from-gray-500 via-gray-800 to-black text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading 
+                    ? (isEditing ? 'Updating...' : 'Listing...') 
+                    : (isEditing ? 'Update Item' : 'List Item')
+                  }
+                </button>
               </div>
             </div>
           </div>

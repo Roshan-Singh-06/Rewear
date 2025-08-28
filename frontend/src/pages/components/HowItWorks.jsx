@@ -243,7 +243,7 @@ export default function HowItWorks() {
           viewport={{ once: true, amount: 0.2 }}
         >
           <motion.h3 
-            className="text-3xl font-bold text-center mb-12 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent"
+            className="text-3xl font-bold text-center mb-12 text-gray-900"
             variants={itemVariants}
           >
             Why Choose ClothSwap?
@@ -323,7 +323,7 @@ export default function HowItWorks() {
           viewport={{ once: true }}
         >
           <motion.h3 
-            className="text-3xl font-bold mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent"
+            className="text-3xl font-bold mb-4 text-gray-900"
             whileHover={{ scale: 1.05 }}
             transition={{ duration: 0.3 }}
           >

@@ -23,7 +23,7 @@ const ImageSlider = () => {
       description: "Connect with like-minded individuals who share your passion for fashion and sustainability. Build your network while refreshing your wardrobe."
     },
     {
-        image: "/swap3.webp",
+        image: "/swap3.jpg",
       title: "Quality & Trust Guaranteed",
       description: "Every item goes through our quality verification process. Trade with confidence knowing all clothes meet our cleanliness and condition standards."
     }

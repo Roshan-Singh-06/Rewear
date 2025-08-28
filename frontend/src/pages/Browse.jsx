@@ -1,20 +1,121 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Modal from './Modal';
+import ItemService from '../services/itemService';
+import SwapService from '../services/swapService';
+import PointsService from '../services/pointsService';
+import { useAuth } from '../hooks/useAuthContext';
 
-export default function Browse({ onLogout }) {
+export default function Browse() {
+  const { user: _user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [favorites, setFavorites] = useState(new Set());
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterCondition, setFilterCondition] = useState('All');
+  const [filterCity, setFilterCity] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
   const [selectedProductForSwap, setSelectedProductForSwap] = useState(null);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [selectedProductForPurchase, setSelectedProductForPurchase] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [userListings, setUserListings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Get city from URL params on component mount
+  useEffect(() => {
+    const cityParam = searchParams.get('city');
+    const locationParam = searchParams.get('location');
+    
+    if (locationParam) {
+      setFilterCity(locationParam);
+    } else if (cityParam) {
+      setFilterCity(cityParam);
+    }
+  }, [searchParams]);
+
+  // Load products from backend
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        let response;
+        
+        // If there's a city filter, use location-based search
+        if (filterCity && filterCity.trim()) {
+          console.log('Searching by location:', filterCity);
+          response = await ItemService.getItemsByLocation(filterCity.trim());
+          
+          // Handle location search response structure
+          if (response && response.data) {
+            // Backend returns { items: [...], searchLocation: "...", totalFound: ... }
+            setProducts(Array.isArray(response.data.items) ? response.data.items : response.data);
+          } else {
+            setProducts([]);
+          }
+        } else {
+          // Otherwise use regular filtering
+          const filters = {};
+          if (filterCategory !== 'All') filters.category = filterCategory;
+          if (filterCondition !== 'All') filters.condition = filterCondition;
+          
+          response = await ItemService.getAllItems(filters);
+          
+          // Handle regular items response structure
+          if (response && response.data) {
+            setProducts(Array.isArray(response.data) ? response.data : []);
+          } else {
+            setProducts([]);
+          }
+        }
+        
+        console.log('Items response:', response); // Debug log
+        console.log('Products set:', response?.data); // Debug log
+        
+      } catch (error) {
+        console.error('Error loading products:', error);
+        setError('Failed to load products');
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProducts();
+  }, [filterCategory, filterCondition, filterCity]);
+
+  // Load user's listings for swap functionality
+  useEffect(() => {
+    const loadUserListings = async () => {
+      if (!isAuthenticated) return;
+      
+      try {
+        const response = await ItemService.getAllItems({ userItems: true });
+        if (response && response.data) {
+          setUserListings(Array.isArray(response.data) ? response.data : []);
+        } else {
+          setUserListings([]);
+        }
+      } catch (error) {
+        console.error('Error loading user listings:', error);
+      }
+    };
+
+    loadUserListings();
+  }, [isAuthenticated]);
 
   // Handler functions for modals
-  const handleRequestSwap = (product) => {
+  const _handleRequestSwap = async (product) => {
+    if (!isAuthenticated) {
+      alert('Please login to request a swap');
+      return;
+    }
     setSelectedProductForSwap(product);
     setIsSwapModalOpen(true);
   };
@@ -24,7 +125,11 @@ export default function Browse({ onLogout }) {
     setSelectedProductForSwap(null);
   };
 
-  const handleBuyWithPoints = (product) => {
+  const _handleBuyWithPoints = async (product) => {
+    if (!isAuthenticated) {
+      alert('Please login to buy with points');
+      return;
+    }
     setSelectedProductForPurchase(product);
     setIsPurchaseModalOpen(true);
   };
@@ -34,210 +139,6 @@ export default function Browse({ onLogout }) {
     setSelectedProductForPurchase(null);
   };
 
-  // Sample user's listings (what they can offer for swap)
-  const userListings = [
-    {
-      _id: "user_item_1",
-      title: "Blue Denim Jacket",
-      description: "Vintage blue denim jacket from Gap, excellent condition.",
-      images: ["https://images.unsplash.com/photo-1576995853123-5a10305d93c0?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "casual",
-      size: "M",
-      condition: "like-new",
-      pointsCost: 140,
-      status: "available"
-    },
-    {
-      _id: "user_item_2",
-      title: "Black Casual Dress",
-      description: "Comfortable black dress, perfect for everyday wear.",
-      images: ["https://images.unsplash.com/photo-1595777457583-95e059d581b8?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "casual",
-      size: "S",
-      condition: "good",
-      pointsCost: 100,
-      status: "available"
-    },
-    {
-      _id: "user_item_3",
-      title: "White Sneakers",
-      description: "Clean white sneakers from Nike, barely used.",
-      images: ["https://images.unsplash.com/photo-1600269452121-4f2416e55c28?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "sports",
-      size: "8",
-      condition: "like-new",
-      pointsCost: 120,
-      status: "available"
-    }
-  ];
-
-  // Extended product data - all items displayed here
-  const products = [
-    {
-      _id: "507f1f77bcf86cd799439011",
-      title: "Vintage Denim Jacket",
-      description: "Classic blue denim jacket from Levi's, barely worn. Perfect for layering in any season.",
-      images: ["https://images.unsplash.com/photo-1544966503-7cc5ac882d5a?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "casual",
-      size: "M",
-      condition: "like-new",
-      pointsCost: 150,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439012",
-        username: "sarah_m",
-        email: "sarah@example.com"
-      },
-      createdAt: "2024-01-15T10:30:00Z",
-      updatedAt: "2024-01-15T10:30:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439013",
-      title: "Summer Floral Dress",
-      description: "Beautiful floral print sundress from Zara, perfect for summer occasions and casual outings.",
-      images: ["https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "party",
-      size: "S",
-      condition: "good",
-      pointsCost: 120,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439014",
-        username: "emma_l",
-        email: "emma@example.com"
-      },
-      createdAt: "2024-01-10T14:20:00Z",
-      updatedAt: "2024-01-10T14:20:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439015",
-      title: "Black Leather Boots",
-      description: "Authentic Dr. Martens leather boots, comfortable and stylish for everyday wear.",
-      images: ["https://images.unsplash.com/photo-1608256246200-53e8b47b82d6?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "casual",
-      size: "8",
-      condition: "good",
-      pointsCost: 180,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439016",
-        username: "alex_r",
-        email: "alex@example.com"
-      },
-      createdAt: "2024-01-12T09:15:00Z",
-      updatedAt: "2024-01-12T09:15:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439017",
-      title: "Casual White Sneakers",
-      description: "Clean white Adidas sneakers, great for everyday wear and sports activities.",
-      images: ["https://images.unsplash.com/photo-1549298916-b41d501d3772?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Men",
-      subCategory: "sports",
-      size: "10",
-      condition: "good",
-      pointsCost: 100,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439018",
-        username: "mike_t",
-        email: "mike@example.com"
-      },
-      createdAt: "2024-01-08T16:45:00Z",
-      updatedAt: "2024-01-08T16:45:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439019",
-      title: "Designer Evening Dress",
-      description: "Elegant black evening dress, perfect for formal events and special occasions.",
-      images: ["https://images.unsplash.com/photo-1566479179817-c04b62b2d46f?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "formal",
-      size: "M",
-      condition: "new",
-      pointsCost: 250,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439020",
-        username: "jessica_k",
-        email: "jessica@example.com"
-      },
-      createdAt: "2024-01-14T11:30:00Z",
-      updatedAt: "2024-01-16T14:20:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439021",
-      title: "Navy Blue Blazer",
-      description: "Professional Hugo Boss blazer, perfect for office wear and formal business meetings.",
-      images: ["https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Men",
-      subCategory: "formal",
-      size: "L",
-      condition: "like-new",
-      pointsCost: 200,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439022",
-        username: "david_p",
-        email: "david@example.com"
-      },
-      createdAt: "2024-01-11T13:10:00Z",
-      updatedAt: "2024-01-11T13:10:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439023",
-      title: "Cozy Winter Sweater",
-      description: "Warm wool sweater perfect for cold weather, in excellent condition.",
-      images: ["https://images.unsplash.com/photo-1434389677669-e08b4cac3105?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Women",
-      subCategory: "casual",
-      size: "L",
-      condition: "good",
-      pointsCost: 90,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439024",
-        username: "mia_c",
-        email: "mia@example.com"
-      },
-      createdAt: "2024-01-09T12:30:00Z",
-      updatedAt: "2024-01-09T12:30:00Z"
-    },
-    {
-      _id: "507f1f77bcf86cd799439025",
-      title: "Trendy Sunglasses",
-      description: "Stylish Ray-Ban sunglasses, perfect for sunny days and outdoor activities.",
-      images: ["https://images.unsplash.com/photo-1572635196237-14b3f281503f?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&q=80"],
-      category: "Unisex",
-      subCategory: "accessories",
-      size: "One Size",
-      condition: "like-new",
-      pointsCost: 80,
-      status: "available",
-      approved: true,
-      listedBy: {
-        _id: "507f1f77bcf86cd799439026",
-        username: "tom_h",
-        email: "tom@example.com"
-      },
-      createdAt: "2024-01-13T15:45:00Z",
-      updatedAt: "2024-01-13T15:45:00Z"
-    }
-  ];
-
   const toggleFavorite = (productId) => {
     const newFavorites = new Set(favorites);
     if (newFavorites.has(productId)) {
@@ -246,6 +147,46 @@ export default function Browse({ onLogout }) {
       newFavorites.add(productId);
     }
     setFavorites(newFavorites);
+  };
+
+  const handleViewDetails = (product) => {
+    // Navigate to product detail page with product ID
+    navigate(`/product/${product._id}`, { state: { product } });
+  };
+
+  // Handle "Items Near Me" functionality
+  const handleNearMe = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await ItemService.getItemsNearMe();
+      
+      if (response && response.data) {
+        setProducts(Array.isArray(response.data.items) ? response.data.items : []);
+        setFilterCity(''); // Clear city filter when using "Near Me"
+        
+        // Show user's location in the header
+        if (response.data.userLocation) {
+          const { city, district, state } = response.data.userLocation;
+          const locationText = [city, district, state].filter(Boolean).join(', ');
+          setFilterCity(locationText);
+        }
+      } else {
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error('Error loading items near user:', error);
+      setError('Failed to load items near your location. Please make sure your profile has location information.');
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getConditionColor = (condition) => {
@@ -287,10 +228,10 @@ export default function Browse({ onLogout }) {
   };
 
   // Filter and sort products
-  const filteredProducts = products
-    .filter(product => product.approved && product.status === 'available')
-    .filter(product => filterCategory === 'All' || product.category === filterCategory)
-    .filter(product => filterCondition === 'All' || product.condition === filterCondition)
+  const filteredProducts = (products || [])
+    .filter(product => product?.approved && product?.status === 'available')
+    .filter(product => filterCategory === 'All' || product?.category === filterCategory)
+    .filter(product => filterCondition === 'All' || product?.condition === filterCondition)
     .sort((a, b) => {
       switch (sortBy) {
         case 'newest':
@@ -347,9 +288,46 @@ export default function Browse({ onLogout }) {
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-gray-600 text-lg">Loading items...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center max-w-md mx-auto px-4">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Oops! Something went wrong</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar onLogout={onLogout} />
+      <Navbar />
       
       {/* Hero Section */}
       <motion.section 
@@ -365,7 +343,7 @@ export default function Browse({ onLogout }) {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            Browse All Items
+            {filterCity ? `Items in ${filterCity}` : 'Browse All Items'}
           </motion.h1>
           <motion.p 
             className="text-lg text-gray-300 max-w-2xl mx-auto"
@@ -373,7 +351,10 @@ export default function Browse({ onLogout }) {
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.4 }}
           >
-            Discover amazing clothing items from our community. Find your perfect match and start swapping!
+            {filterCity ? 
+              `Find amazing clothing items from sellers in ${filterCity}. Connect with local swappers!` :
+              'Discover amazing clothing items from our community. Find your perfect match and start swapping!'
+            }
           </motion.p>
           <motion.div 
             className="mt-8 text-2xl"
@@ -382,7 +363,7 @@ export default function Browse({ onLogout }) {
             transition={{ duration: 0.5, delay: 0.6 }}
           >
             <span className="bg-white text-black px-4 py-2 rounded-full font-bold">
-              {filteredProducts.length} items available
+              {filteredProducts.length} items available {filterCity && `in ${filterCity}`}
             </span>
           </motion.div>
         </div>
@@ -418,6 +399,17 @@ export default function Browse({ onLogout }) {
               </motion.div>
 
               <motion.div variants={filterVariants}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                <input
+                  type="text"
+                  placeholder="Enter city name"
+                  value={filterCity}
+                  onChange={(e) => setFilterCity(e.target.value)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent w-48"
+                />
+              </motion.div>
+
+              <motion.div variants={filterVariants}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
                 <select
                   value={filterCondition}
@@ -446,6 +438,19 @@ export default function Browse({ onLogout }) {
                   <option value="price-high">Points: High to Low</option>
                 </select>
               </motion.div>
+
+              {/* Near Me Button */}
+              {isAuthenticated && (
+                <motion.div variants={filterVariants}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quick Search</label>
+                  <button
+                    onClick={handleNearMe}
+                    className="px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 focus:ring-2 focus:ring-black focus:ring-offset-2 transition-colors"
+                  >
+                    Items Near Me
+                  </button>
+                </motion.div>
+              )}
             </motion.div>
 
             <motion.div 
@@ -470,7 +475,7 @@ export default function Browse({ onLogout }) {
         <div className="max-w-7xl mx-auto px-6">
           <AnimatePresence>
             <motion.div 
-              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"
+              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"
               variants={containerVariants}
               initial="hidden"
               animate="visible"
@@ -486,7 +491,7 @@ export default function Browse({ onLogout }) {
                     transition: { duration: 0.3 }
                   }}
                   className="bg-white border border-gray-200 rounded-2xl shadow-lg hover:shadow-2xl hover:border-gray-300 transition-all duration-500 ease-out overflow-hidden group cursor-pointer"
-                  onClick={() => console.log('Card clicked:', product.title)}
+                  onClick={() => handleViewDetails(product)}
                   layout
                 >
                   {/* Image Section */}
@@ -530,7 +535,7 @@ export default function Browse({ onLogout }) {
 
                     {/* Category Tag */}
                     <div className="absolute bottom-3 left-3 transform group-hover:scale-105 transition-transform duration-300">
-                      <span className="px-3 py-1 text-xs font-medium bg-black/80 group-hover:bg-black text-white rounded-full shadow-lg">
+                      <span className="px-3 py-1 text-xs font-medium bg-white/90 backdrop-blur-sm text-gray-700 rounded-full shadow-lg">
                         {product.category}
                       </span>
                     </div>
@@ -540,7 +545,7 @@ export default function Browse({ onLogout }) {
                   <div className="p-4 group-hover:bg-gray-50 transition-colors duration-300">
                     {/* Title and Sub-category */}
                     <div className="mb-2">
-                      <h3 className="font-bold text-gray-900 truncate text-base group-hover:text-black transition-colors duration-300">{product.title}</h3>
+                      <h3 className="font-bold text-gray-900 truncate text-base group-hover:text-blue-600 transition-colors duration-300">{product.title}</h3>
                       <p className="text-xs text-gray-600 group-hover:text-gray-700 transition-colors duration-300">{getSubCategoryLabel(product.subCategory)} • Size {product.size}</p>
                     </div>
 
@@ -551,16 +556,11 @@ export default function Browse({ onLogout }) {
                       </span>
                     </div>
 
-                    {/* Description */}
-                    <p className="text-xs text-gray-600 mb-3 line-clamp-2 group-hover:text-gray-700 transition-colors duration-300 leading-relaxed">
-                      {product.description}
-                    </p>
-
                     {/* Points Cost */}
                     <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 group-hover:bg-white rounded-lg transition-colors duration-300">
                       <div className="flex items-center space-x-1">
                         <span className="text-lg group-hover:scale-110 transition-transform duration-300">💎</span>
-                        <span className="font-bold text-gray-900 text-base group-hover:text-black transition-colors duration-300">{product.pointsCost}</span>
+                        <span className="font-bold text-gray-900 text-base group-hover:text-blue-600 transition-colors duration-300">{product.pointsCost}</span>
                         <span className="text-xs text-gray-500 font-medium">points</span>
                       </div>
                       <span className="text-xs text-gray-500 group-hover:text-gray-600 transition-colors duration-300">{formatDate(product.createdAt)}</span>
@@ -573,30 +573,15 @@ export default function Browse({ onLogout }) {
 
                     {/* Action Buttons */}
                     <div className="space-y-2">
-                      <motion.button 
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRequestSwap(product);
+                          handleViewDetails(product);
                         }}
-                        className="w-full py-2 px-3 rounded-lg font-semibold text-sm bg-gradient-to-r from-gray-800 to-black hover:from-gray-700 hover:to-gray-900 text-white shadow-lg hover:shadow-xl border border-gray-700 transition-all duration-300"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+                        className="w-full py-2 px-3 rounded-lg font-semibold text-sm transition-all duration-300 transform hover:scale-105 active:scale-95 border bg-gradient-to-r from-gray-800 to-black hover:from-gray-700 hover:to-gray-900 text-white shadow-lg hover:shadow-xl border-gray-700"
                       >
-                        Request Swap
-                      </motion.button>
-                      
-                      <motion.button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleBuyWithPoints(product);
-                        }}
-                        className="w-full py-2 px-3 rounded-lg font-semibold text-sm bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl border border-blue-600 transition-all duration-300 flex items-center justify-center space-x-2"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                      >
-                        <span className="text-base">💎</span>
-                        <span>Buy with Points</span>
-                      </motion.button>
+                        View Details
+                      </button>
                     </div>
                   </div>
                 </motion.div>
@@ -664,11 +649,13 @@ const SwapRequestModal = ({ selectedProduct, userListings, onClose }) => {
     });
     setIsRequestSent(true);
     
-    // Auto close modal after 2 seconds
+    // Auto close modal after 2 seconds and redirect to messages
     setTimeout(() => {
       onClose();
       setIsRequestSent(false);
       setSelectedUserItem(null);
+      // Redirect to messages page
+      window.location.href = '/messages';
     }, 2000);
   };
 
@@ -828,10 +815,12 @@ const PurchaseConfirmationModal = ({ selectedProduct, onClose }) => {
         title: selectedProduct.title
       });
       
-      // Auto close modal after 2 seconds
+      // Auto close modal after 2 seconds and redirect to messages
       setTimeout(() => {
         onClose();
         setIsPurchaseComplete(false);
+        // Redirect to messages page
+        window.location.href = '/messages';
       }, 2000);
     }, 1500);
   };

@@ -59,6 +59,30 @@ const UserSchema = new mongoose.Schema(
       trim: true,
       match: [/^\d{4,10}$/, "Please enter a valid pin code"],
     },
+    district: {
+      type: String,
+      trim: true,
+      maxlength: [50, "District cannot exceed 50 characters"],
+    },
+    city: {
+      type: String,
+      trim: true,
+      maxlength: [50, "City cannot exceed 50 characters"],
+    },
+    latitude: {
+      type: Number,
+      min: [-90, "Latitude must be between -90 and 90"],
+      max: [90, "Latitude must be between -90 and 90"],
+    },
+    longitude: {
+      type: Number,
+      min: [-180, "Longitude must be between -180 and 180"],
+      max: [180, "Longitude must be between -180 and 180"],
+    },
+    profilePicture: {
+      type: String, // URL to the uploaded image
+      trim: true,
+    },
     isProfileComplete: {
       type: Boolean,
       default: false,
@@ -113,6 +137,8 @@ UserSchema.pre("save", async function (next) {
                           this.state && 
                           this.country && 
                           this.pinCode &&
+                          this.district &&
+                          this.city &&
                           this.isEmailVerified;
   
   next();
@@ -125,6 +151,8 @@ UserSchema.methods.checkProfileCompletion = function() {
          this.state && 
          this.country && 
          this.pinCode &&
+         this.district &&
+         this.city &&
          this.isEmailVerified;
 };
 

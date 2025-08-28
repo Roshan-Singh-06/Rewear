@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = "http://localhost:5001/api";
 
 // Create axios instance with default config
 const api = axios.create({
@@ -71,6 +71,8 @@ export const cancelOrder = (orderId) => api.put(`/orders/${orderId}/cancel`);
 
 // Item Management
 export const deleteItem = (id) => api.delete(`/items/${id}`);
+export const approveItem = (id) => api.put(`/admin/items/${id}/approve`);
+export const rejectItem = (id) => api.put(`/admin/items/${id}/reject`);
 
 // Legacy aliases for backward compatibility
 export const getUsers = (params) => getAllUsers(params);

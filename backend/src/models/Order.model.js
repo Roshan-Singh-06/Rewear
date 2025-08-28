@@ -79,6 +79,8 @@ const OrderSchema = new mongoose.Schema(
 // Generate unique order code and verification codes before saving
 OrderSchema.pre('save', async function(next) {
   if (this.isNew) {
+    console.log('Order pre-save middleware triggered for new order');
+    
     const generateOrderCode = () => {
       const prefix = this.orderType === 'swap' ? 'SW' : 'PR';
       const timestamp = Date.now().toString().slice(-6);
@@ -90,20 +92,31 @@ OrderSchema.pre('save', async function(next) {
       return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit code
     };
 
-    // Generate unique order code
-    let isUnique = false;
-    while (!isUnique) {
-      this.orderCode = generateOrderCode();
-      const existingOrder = await mongoose.model('Order').findOne({ orderCode: this.orderCode });
-      if (!existingOrder) {
-        isUnique = true;
+    try {
+      // Generate unique order code
+      let isUnique = false;
+      while (!isUnique) {
+        this.orderCode = generateOrderCode();
+        console.log('Generated order code:', this.orderCode);
+        const existingOrder = await this.constructor.findOne({ orderCode: this.orderCode });
+        if (!existingOrder) {
+          isUnique = true;
+        }
       }
-    }
 
-    // Generate verification codes
-    this.requesterCode = generateVerificationCode();
-    if (this.orderType === 'swap') {
-      this.responderCode = generateVerificationCode();
+      // Generate verification codes
+      this.requesterCode = generateVerificationCode();
+      console.log('Generated requester code:', this.requesterCode);
+      
+      if (this.orderType === 'swap') {
+        this.responderCode = generateVerificationCode();
+        console.log('Generated responder code:', this.responderCode);
+      }
+      
+      console.log('Order codes generated successfully');
+    } catch (error) {
+      console.error('Error in Order pre-save middleware:', error);
+      return next(error);
     }
   }
   next();

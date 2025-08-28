@@ -1,11 +1,21 @@
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import CssBaseline from '@mui/material/CssBaseline';
 import Stack from '@mui/material/Stack';
 import ColorModeSelect from '../shared-theme/ColorModeSelect.jsx';
 import SignInCard from './components/SignInCard.jsx';
 import Content from './components/Content.jsx';
+import { useAuth } from '../hooks/useAuthContext';
 
-export default function Authentication({ onLogin }) {
+export default function Authentication() {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/home', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
   return (
     <>
       <CssBaseline enableColorScheme />
@@ -61,7 +71,7 @@ export default function Authentication({ onLogin }) {
             }}
           >
             <Content />
-            <SignInCard onLogin={onLogin} />
+            <SignInCard />
           </Stack>
         </Stack>
       </Stack>

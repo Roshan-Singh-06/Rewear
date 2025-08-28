@@ -6,6 +6,8 @@ const {
   getAllOrders,
   getSwapPoints,
   updateSwapPoints,
+  approveItem,
+  rejectItem,
 } = require("../controllers/admin.controller");
 const verifyJWT = require("../middlewares/auth.middleware");
 const { isAdmin } = require("../middlewares/admin.middleware");
@@ -18,6 +20,8 @@ router.delete("/users/:id", verifyJWT, isAdmin, deleteUser); // Delete user and 
 
 // Item Management (listing only, no approval/rejection)
 router.get("/items", verifyJWT, isAdmin, getAllItems); // Get all items with pagination and filters
+router.put("/items/:id/approve", verifyJWT, isAdmin, approveItem); // Approve item
+router.put("/items/:id/reject", verifyJWT, isAdmin, rejectItem); // Reject item
 
 // Order Management
 router.get("/orders", verifyJWT, isAdmin, getAllOrders); // Get all orders with pagination and filters
