@@ -319,26 +319,6 @@ const SwapDetail = () => {
         </div>
       </section>
 
-      {/* Debug Info - Only in development */}
-      {import.meta.env.DEV && swapData && (
-        <section className="py-4">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h4 className="font-bold text-yellow-800 mb-2">Debug Info:</h4>
-              <div className="text-sm text-yellow-700 grid grid-cols-2 gap-2">
-                <p><strong>Notification Type:</strong> {swapData.type}</p>
-                <p><strong>Swap ID:</strong> {getSwapId(swapData) || 'Not found'}</p>
-                <p><strong>Swap Status:</strong> {swapData.swapId?.status || 'No status'}</p>
-                <p><strong>Has Item Offered:</strong> {swapData.itemOffered ? 'Yes' : 'No'}</p>
-                <p><strong>Has Item Requested:</strong> {swapData.itemRequested ? 'Yes' : 'No'}</p>
-                <p><strong>Is Actionable:</strong> {isSwapActionable(swapData) ? 'Yes' : 'No'}</p>
-                <p className="col-span-2"><strong>Validation:</strong> {validateSwapData(swapData).isValid ? 'Valid' : validateSwapData(swapData).error}</p>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
       {/* Main Content */}
       <section className="py-8">
         <div className="max-w-7xl mx-auto px-6">

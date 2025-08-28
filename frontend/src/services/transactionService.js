@@ -48,10 +48,10 @@ class TransactionService {
     }
   }
 
-  // Submit simple feedback from notification
-  async submitFeedbackSimple(notificationId, condition) {
+  // Submit simple feedback for transaction
+  async submitFeedbackSimple(transactionId, transactionType, condition) {
     try {
-      const response = await axiosInstance.post(`/transactions/feedback/${notificationId}`, {
+      const response = await axiosInstance.post(`/transactions/feedback/${transactionType}/${transactionId}`, {
         condition
       });
       return response.data;

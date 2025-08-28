@@ -4,6 +4,7 @@ const Item = require("../models/Item.model");
 const Notification = require("../models/Notification.model");
 const Feedback = require("../models/Feedback.model");
 const Swap = require("../models/Swap.model");
+const Order = require("../models/Order.model");
 const apiResponse = require("../utils/apiResponse");
 const apiError = require("../utils/apiError");
 const asyncHandler = require("../utils/asynchandler");
@@ -186,56 +187,64 @@ const markItemReceived = asyncHandler(async (req, res) => {
 
 // Simple feedback submission for notifications
 const submitFeedbackSimple = asyncHandler(async (req, res) => {
-  const { notificationId } = req.params;
+  const { transactionId, transactionType } = req.params;
   const { condition } = req.body;
   const fromUserId = req.user._id;
 
-  console.log(`Feedback submission attempt - Notification: ${notificationId}, From User: ${fromUserId}, Condition: ${condition}`);
+  console.log(`Feedback submission attempt - Transaction: ${transactionId}, Type: ${transactionType}, From User: ${fromUserId}, Condition: ${condition}`);
 
-  // Find the notification to get related info
-  const notification = await Notification.findById(notificationId)
-    .populate('sender')
-    .populate('relatedItem')
-    .populate('relatedSwap');
-  
-  if (!notification) {
-    console.log(`Notification not found: ${notificationId}`);
-    throw new apiError(404, "Notification not found");
+  // Validate transaction type
+  if (!['swap', 'order'].includes(transactionType)) {
+    throw new apiError(400, "Invalid transaction type. Must be 'swap' or 'order'");
   }
 
-  // Determine who is giving feedback to whom and validate permissions
+  // Get transaction details based on type
+  let transaction;
   let toUserId;
-  let feedbackType = 'swap';
-  let relatedSwap = notification.relatedSwap?._id || null;
-  let relatedItem = notification.relatedItem?._id || null;
-
-  // Only allow feedback for swap_accepted notifications (swap completion)
-  if (notification.type === 'swap_accepted') {
-    // If current user is the recipient, they're giving feedback to the sender
-    if (notification.recipient.toString() === fromUserId.toString()) {
-      toUserId = notification.sender._id;
+  
+  if (transactionType === 'swap') {
+    transaction = await Swap.findById(transactionId).populate('requester responder');
+    if (!transaction) {
+      throw new apiError(404, "Swap not found");
     }
-    // If current user is the sender, they're giving feedback to the recipient
-    else if (notification.sender._id.toString() === fromUserId.toString()) {
-      toUserId = notification.recipient;
+    
+    // Determine the other user
+    if (transaction.requester._id.toString() === fromUserId.toString()) {
+      toUserId = transaction.responder._id;
+    } else if (transaction.responder._id.toString() === fromUserId.toString()) {
+      toUserId = transaction.requester._id;
     } else {
-      throw new apiError(403, "You are not authorized to give feedback for this notification");
+      throw new apiError(403, "You are not part of this swap");
     }
-  } else {
-    throw new apiError(400, "Feedback can only be given for completed swaps (swap_accepted notifications)");
+  } else if (transactionType === 'order') {
+    transaction = await Order.findById(transactionId).populate('buyer seller');
+    if (!transaction) {
+      throw new apiError(404, "Order not found");
+    }
+    
+    // Determine the other user
+    if (transaction.buyer._id.toString() === fromUserId.toString()) {
+      toUserId = transaction.seller._id;
+    } else if (transaction.seller._id.toString() === fromUserId.toString()) {
+      toUserId = transaction.buyer._id;
+    } else {
+      throw new apiError(403, "You are not part of this order");
+    }
   }
 
   console.log(`Feedback direction - From: ${fromUserId}, To: ${toUserId}`);
 
-  // Check if user has already given feedback for this swap
+  // Check if user has already given feedback for this transaction (prevent loops)
   const existingFeedback = await Feedback.findOne({
     fromUser: fromUserId,
-    relatedSwap: relatedSwap
+    toUser: toUserId,
+    transactionId: transactionId,
+    transactionType: transactionType
   });
 
   if (existingFeedback) {
-    console.log(`User has already given feedback for this swap: ${existingFeedback._id}`);
-    throw new apiError(400, "You have already given feedback for this swap");
+    console.log(`User has already given feedback: ${existingFeedback._id}`);
+    throw new apiError(400, "You have already given feedback for this transaction");
   }
 
   // Get points for the condition
@@ -255,25 +264,17 @@ const submitFeedbackSimple = asyncHandler(async (req, res) => {
     const feedbackData = {
       fromUser: fromUserId,
       toUser: toUserId,
-      relatedSwap: relatedSwap,
-      relatedItem: relatedItem,
-      notification: notificationId,
+      transactionId: transactionId,
+      transactionType: transactionType,
       condition: condition,
       pointsAwarded: pointsAwarded,
-      feedbackType: feedbackType
+      rating: pointsAwarded / 10 // Convert points to rating (1-5 scale)
     };
 
     console.log(`Creating feedback with data: ${JSON.stringify(feedbackData)}`);
     
     const feedback = await Feedback.create(feedbackData);
     console.log(`Feedback created successfully: ${feedback._id}`);
-
-    // Mark feedback as given in the notification (for the current user)
-    await Notification.findByIdAndUpdate(notificationId, {
-      feedbackGiven: true,
-      feedbackDate: new Date()
-    });
-    console.log(`Notification updated with feedback status`);
 
     // Award points to the recipient of the feedback
     const updatedUser = await User.findByIdAndUpdate(
@@ -283,65 +284,291 @@ const submitFeedbackSimple = asyncHandler(async (req, res) => {
     );
     console.log(`Points awarded to user. New balance: ${updatedUser.points}`);
 
-    // Check if both users have given feedback for this swap
-    const counterFeedback = await Feedback.findOne({
+    // Send notification to the user who received the feedback
+    await Notification.create({
+      recipient: toUserId,
+      sender: fromUserId,
+      type: 'feedback_received',
+      title: 'Feedback Received',
+      message: `You received a "${condition}" rating and earned ${pointsAwarded} points!`,
+      data: {
+        feedbackId: feedback._id,
+        transactionId: transactionId,
+        transactionType: transactionType,
+        rating: feedback.rating,
+        condition: condition,
+        pointsAwarded: pointsAwarded
+      }
+    });
+    console.log(`Feedback received notification sent to user: ${toUserId}`);
+
+    // Check if the other user has already given feedback
+    const otherUserFeedback = await Feedback.findOne({
       fromUser: toUserId,
       toUser: fromUserId,
-      relatedSwap: relatedSwap
+      transactionId: transactionId,
+      transactionType: transactionType
     });
 
-    if (counterFeedback) {
-      // Both users have given feedback, mark swap as completed
-      await Swap.findByIdAndUpdate(relatedSwap, {
-        status: 'completed',
-        completedAt: new Date()
-      });
-      console.log(`Swap ${relatedSwap} marked as completed - both feedbacks received`);
+    let feedbackCompleted = false;
 
-      // Create completion notification for both users
-      const completionMessage = "Swap completed! Both users have provided feedback.";
-      
-      await Notification.create({
-        recipient: toUserId,
-        sender: fromUserId,
-        type: 'swap_completed',
-        title: 'Swap Completed!',
-        message: completionMessage,
-        relatedSwap: relatedSwap,
-        relatedItem: relatedItem
-      });
-
-      await Notification.create({
-        recipient: fromUserId,
-        sender: toUserId,
-        type: 'swap_completed',
-        title: 'Swap Completed!',
-        message: completionMessage,
-        relatedSwap: relatedSwap,
-        relatedItem: relatedItem
-      });
-    } else {
-      // Only one feedback given, create notification for the other user to give feedback
+    if (!otherUserFeedback) {
+      // Other user hasn't given feedback yet, send them a request
       await Notification.create({
         recipient: toUserId,
         sender: fromUserId,
         type: 'feedback_request',
-        title: 'Feedback Request',
-        message: `${req.user.name} has rated you "${condition}" and you earned ${pointsAwarded} points! Please rate them back to complete the swap.`,
-        relatedUser: fromUserId,
-        relatedSwap: relatedSwap,
-        relatedItem: relatedItem
+        title: 'Give Feedback',
+        message: `Please rate your experience with this ${transactionType}`,
+        data: {
+          transactionId: transactionId,
+          transactionType: transactionType,
+          fromUser: fromUserId
+        }
       });
+      console.log(`Feedback request notification sent to user: ${toUserId}`);
+    } else {
+      // Both users have given feedback
+      feedbackCompleted = true;
+      console.log(`Both users have given feedback for ${transactionType}: ${transactionId}`);
+      
+      // Mark transaction as completed if it's a swap
+      if (transactionType === 'swap') {
+        await Swap.findByIdAndUpdate(transactionId, {
+          status: 'completed',
+          completedAt: new Date()
+        });
+      }
     }
 
     console.log(`Feedback submission completed successfully`);
+    
     res.json(
       new apiResponse(200, { 
         pointsAwarded, 
         feedbackId: feedback._id,
-        swapCompleted: !!counterFeedback
+        feedbackCompleted: feedbackCompleted,
+        message: feedbackCompleted ? 
+          "Feedback exchange completed!" : 
+          "Feedback submitted! Waiting for the other user's feedback."
       }, "Feedback submitted successfully")
     );
+    
+    res.json(
+      new apiResponse(200, { 
+        pointsAwarded, 
+        feedbackId: feedback._id,
+        feedbackCompleted: feedbackCompleted,
+        message: feedbackCompleted ? 
+          "Feedback exchange completed!" : 
+          "Feedback submitted! Waiting for the other user's feedback."
+      }, "Feedback submitted successfully")
+    );
+
+  } catch (error) {
+    console.error(`Error in feedback submission: ${error.message}`);
+    throw new apiError(500, `Failed to submit feedback: ${error.message}`);
+  }
+});
+
+// Legacy notification-based feedback submission (for backward compatibility)
+const submitFeedbackFromNotification = asyncHandler(async (req, res) => {
+  const { notificationId } = req.params;
+  const { condition } = req.body;
+  const fromUserId = req.user._id;
+
+  console.log(`Legacy feedback submission - Notification: ${notificationId}, From User: ${fromUserId}, Condition: ${condition}`);
+
+  // Find the notification to get related info
+  const notification = await Notification.findById(notificationId)
+    .populate('sender')
+    .populate('relatedItem')
+    .populate('relatedSwap');
+  
+  if (!notification) {
+    console.log(`Notification not found: ${notificationId}`);
+    throw new apiError(404, "Notification not found");
+  }
+
+  console.log(`Notification found:`, {
+    id: notification._id,
+    type: notification.type,
+    relatedSwap: notification.relatedSwap,
+    sender: notification.sender?._id,
+    recipient: notification.recipient
+  });
+
+  // Determine who is giving feedback to whom and validate permissions
+  let toUserId;
+  let feedbackType = 'swap';
+  let relatedSwap = notification.relatedSwap?._id || null;
+  let relatedItem = notification.relatedItem?._id || null;
+
+  // Allow feedback for swap_accepted notifications (swap completion)
+  if (notification.type === 'swap_accepted') {
+    // If current user is the recipient, they're giving feedback to the sender
+    if (notification.recipient.toString() === fromUserId.toString()) {
+      toUserId = notification.sender._id;
+    }
+    // If current user is the sender, they're giving feedback to the recipient
+    else if (notification.sender._id.toString() === fromUserId.toString()) {
+      toUserId = notification.recipient;
+    } else {
+      throw new apiError(403, "You are not authorized to give feedback for this notification");
+    }
+  } 
+  // Also allow feedback for feedback_request notifications
+  else if (notification.type === 'feedback_request') {
+    // If current user is the recipient, they're giving feedback to the sender
+    if (notification.recipient.toString() === fromUserId.toString()) {
+      toUserId = notification.sender._id;
+    } else {
+      throw new apiError(403, "You are not authorized to give feedback for this notification");
+    }
+  } else {
+    throw new apiError(400, "Feedback can only be given for completed swaps or feedback requests");
+  }
+
+  console.log(`Feedback direction - From: ${fromUserId}, To: ${toUserId}`);
+
+  // Check if user has already given feedback for this specific swap (prevent loops)
+  const transactionIdForCheck = relatedSwap || notification._id;
+  const existingFeedback = await Feedback.findOne({
+    fromUser: fromUserId,
+    toUser: toUserId,
+    transactionId: transactionIdForCheck,
+    transactionType: 'swap'
+  });
+
+  if (existingFeedback) {
+    console.log(`User has already given feedback: ${existingFeedback._id}`);
+    throw new apiError(400, "You have already given feedback for this transaction");
+  }
+
+  // Get points for the condition
+  const pointsMap = {
+    'new': 60,
+    'like_new': 50,
+    'good': 40,
+    'fair': 30,
+    'worn': 20
+  };
+  const pointsAwarded = pointsMap[condition] || 40;
+
+  console.log(`Points to award: ${pointsAwarded}`);
+
+  try {
+    // Create feedback record
+    const transactionIdValue = relatedSwap || notification._id;
+    console.log(`Using transactionId: ${transactionIdValue}, relatedSwap: ${relatedSwap}, notificationId: ${notification._id}`);
+    
+    // Ensure we have a valid transactionId
+    if (!transactionIdValue) {
+      throw new apiError(400, "Cannot determine transaction ID for feedback");
+    }
+    
+    const feedbackData = {
+      fromUser: fromUserId,
+      toUser: toUserId,
+      transactionId: transactionIdValue,
+      transactionType: 'swap',
+      condition: condition,
+      rating: pointsAwarded / 10, // Convert points to rating (1-5 scale)
+      pointsAwarded: pointsAwarded
+    };
+
+    console.log(`Creating feedback with data: ${JSON.stringify(feedbackData)}`);
+    
+    const feedback = await Feedback.create(feedbackData);
+    console.log(`Feedback created successfully: ${feedback._id}`);
+
+    // Award points to the recipient of the feedback
+    const updatedUser = await User.findByIdAndUpdate(
+      toUserId,
+      { $inc: { points: pointsAwarded } },
+      { new: true }
+    );
+    console.log(`Points awarded to user. New balance: ${updatedUser.points}`);
+
+    // Send notification to the user who received the feedback
+    const transactionIdForNotification = relatedSwap || notification._id;
+    await Notification.create({
+      recipient: toUserId,
+      sender: fromUserId,
+      type: 'feedback_received',
+      title: 'Feedback Received',
+      message: `You received a "${condition}" rating and earned ${pointsAwarded} points!`,
+      data: {
+        feedbackId: feedback._id,
+        transactionId: transactionIdForNotification,
+        transactionType: 'swap',
+        rating: feedback.rating,
+        condition: condition,
+        pointsAwarded: pointsAwarded
+      }
+    });
+    console.log(`Feedback received notification sent to user: ${toUserId}`);
+
+    // Mark feedback as given in the notification (for the current user)
+    await Notification.findByIdAndUpdate(notificationId, {
+      feedbackGiven: true,
+      feedbackDate: new Date()
+    });
+    console.log(`Notification updated with feedback status`);
+
+    // Check if the other user has already given feedback
+    const transactionIdForFeedback = relatedSwap || notification._id;
+    const otherUserFeedback = await Feedback.findOne({
+      fromUser: toUserId,
+      toUser: fromUserId,
+      transactionId: transactionIdForFeedback,
+      transactionType: 'swap'
+    });
+
+    let feedbackCompleted = false;
+
+    if (!otherUserFeedback) {
+      // Other user hasn't given feedback yet, send them a request
+      await Notification.create({
+        recipient: toUserId,
+        sender: fromUserId,
+        type: 'feedback_request',
+        title: 'Give Feedback',
+        message: `Please rate your experience with this swap`,
+        data: {
+          transactionId: transactionIdForFeedback,
+          transactionType: 'swap',
+          fromUser: fromUserId
+        }
+      });
+      console.log(`Feedback request notification sent to user: ${toUserId}`);
+    } else {
+      // Both users have given feedback
+      feedbackCompleted = true;
+      console.log(`Both users have given feedback for transaction: ${transactionIdForFeedback}`);
+      
+      // Mark swap as completed (only if we have a valid relatedSwap)
+      if (relatedSwap) {
+        await Swap.findByIdAndUpdate(relatedSwap, {
+          status: 'completed',
+          completedAt: new Date()
+        });
+      }
+    }
+
+    console.log(`Feedback submission completed successfully`);
+    
+    res.json(
+      new apiResponse(200, { 
+        pointsAwarded, 
+        feedbackId: feedback._id,
+        feedbackCompleted: feedbackCompleted,
+        message: feedbackCompleted ? 
+          "Feedback exchange completed!" : 
+          "Feedback submitted! Waiting for the other user's feedback."
+      }, "Feedback submitted successfully")
+    );
+
   } catch (error) {
     console.error(`Error in feedback submission: ${error.message}`);
     throw new apiError(500, `Failed to submit feedback: ${error.message}`);
@@ -497,6 +724,7 @@ module.exports = {
   markItemReceived,
   submitFeedback,
   submitFeedbackSimple,
+  submitFeedbackFromNotification,
   getUserTransactions,
   getTransactionDetails,
   getPendingPurchases,

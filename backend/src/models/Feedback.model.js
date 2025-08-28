@@ -12,25 +12,29 @@ const FeedbackSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    relatedSwap: {
+    transactionId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Swap',
-      default: null
-    },
-    relatedItem: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Item',
-      default: null
-    },
-    notification: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Notification',
       required: true,
+    },
+    transactionType: {
+      type: String,
+      enum: ['swap', 'order'],
+      required: true
     },
     condition: {
       type: String,
       enum: ['new', 'like_new', 'good', 'fair', 'worn'],
       required: true
+    },
+    rating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      required: true
+    },
+    comment: {
+      type: String,
+      default: ''
     },
     pointsAwarded: {
       type: Number,
@@ -39,12 +43,6 @@ const FeedbackSchema = new mongoose.Schema(
     feedbackDate: {
       type: Date,
       default: Date.now
-    },
-    // Track what type of transaction this feedback is for
-    feedbackType: {
-      type: String,
-      enum: ['swap', 'purchase'],
-      default: 'swap'
     }
   },
   { timestamps: true }

@@ -10,6 +10,7 @@ const {
   getItemsByCity,
   getItemsByLocation,
   getItemsNearUser,
+  testUserAddress,
 } = require("../controllers/item.controller");
 const verifyJWT = require("../middlewares/auth.middleware");
 const optionalAuth = require("../middlewares/optionalAuth.middleware");
@@ -30,5 +31,8 @@ router.get("/:id", getItemById); // Item detail - MUST be after specific routes
 router.post("/", verifyJWT, checkProfileComplete, upload.array(), createItem); // Add new item
 router.put("/:id", verifyJWT, checkProfileComplete, upload.array(), updateItem); // Edit item (lister/admin)
 router.delete("/:id", verifyJWT, deleteItem); // Remove item (lister/admin)
+
+// Test route to verify user address integration
+router.get("/test/user-address/:userId", testUserAddress); // Test user address data
 
 module.exports = router;

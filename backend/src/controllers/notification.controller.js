@@ -77,10 +77,13 @@ const getUserNotifications = asyncHandler(async (req, res) => {
             });
             notificationObj.counterFeedbackGiven = !!counterFeedback;
             
-            // Check swap completion status
+            // Check swap completion status - both users should have given feedback
             if (existingFeedback && counterFeedback) {
+              // Verify that both feedbacks exist and swap is marked as completed
               const swap = await Swap.findById(notification.relatedSwap);
               notificationObj.swapCompleted = swap?.status === 'completed';
+            } else {
+              notificationObj.swapCompleted = false;
             }
           }
         } else {

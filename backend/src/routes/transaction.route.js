@@ -5,6 +5,7 @@ const {
   markItemReceived,
   submitFeedback,
   submitFeedbackSimple,
+  submitFeedbackFromNotification,
   getUserTransactions,
   getTransactionDetails,
   getPendingPurchases,
@@ -23,8 +24,11 @@ router.patch("/purchase/:purchaseId/respond", respondToPointsPurchase);
 router.patch("/purchase/:purchaseId/received", markItemReceived);
 router.post("/purchase/:purchaseId/feedback", submitFeedback);
 
-// Simple feedback from notifications
-router.post("/feedback/:notificationId", submitFeedbackSimple);
+// Legacy notification-based feedback (must come before the generic route)
+router.post("/feedback/notification/:notificationId", submitFeedbackFromNotification);
+
+// Simple feedback for transactions
+router.post("/feedback/:transactionType/:transactionId", submitFeedbackSimple);
 
 // Transaction management
 router.get("/transactions", getUserTransactions);

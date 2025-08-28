@@ -68,7 +68,7 @@ const getItemsByCity = asyncHandler(async (req, res) => {
     ...baseFilter,
     listedBy: { $in: userIds }
   })
-  .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city profilePicture points')
+  .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city latitude longitude profilePicture points isVerified createdAt')
   .sort({ createdAt: -1 });
 
   console.log(`Found ${items.length} items matching location: ${city}`);
@@ -125,7 +125,7 @@ const getAllItems = asyncHandler(async (req, res) => {
   console.log('getAllItems query params:', req.query);
 
   const items = await Item.find(filter)
-    .populate('listedBy', 'username email')
+    .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city latitude longitude profilePicture points isVerified createdAt')
     .sort({ createdAt: -1 });
 
   console.log(`getAllItems found ${items.length} items`);
@@ -146,14 +146,81 @@ const getItemById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   
   const item = await Item.findById(id)
-    .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city profilePicture points');
+    .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city latitude longitude profilePicture points isVerified createdAt');
 
   if (!item) {
     throw new ApiError(404, "Item not found");
   }
 
+  // Log the seller's address information for debugging
+  console.log('=== SELLER ADDRESS DEBUG ===');
+  console.log('Item ID:', item._id);
+  console.log('Item Title:', item.title);
+  console.log('Seller ID:', item.listedBy._id);
+  console.log('Seller Address Fields:', {
+    fullName: item.listedBy.fullName,
+    address: item.listedBy.address,
+    city: item.listedBy.city,
+    district: item.listedBy.district,
+    state: item.listedBy.state,
+    country: item.listedBy.country,
+    pinCode: item.listedBy.pinCode,
+    latitude: item.listedBy.latitude,
+    longitude: item.listedBy.longitude,
+    isVerified: item.listedBy.isVerified
+  });
+  console.log('===========================');
+
   res.status(200).json(
     new ApiResponse(200, item, "Item retrieved successfully")
+  );
+});
+
+// Test endpoint to verify user address integration
+const testUserAddress = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  
+  // Get user details with all address fields
+  const user = await User.findById(userId).select('username email fullName phoneNumber address state country pinCode district city latitude longitude isVerified createdAt');
+  
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+  
+  console.log('=== USER ADDRESS TEST ===');
+  console.log('User ID:', user._id);
+  console.log('Complete Address Data:', {
+    fullName: user.fullName,
+    address: user.address,
+    city: user.city,
+    district: user.district,
+    state: user.state,
+    country: user.country,
+    pinCode: user.pinCode,
+    latitude: user.latitude,
+    longitude: user.longitude,
+    isVerified: user.isVerified,
+    createdAt: user.createdAt
+  });
+  console.log('========================');
+  
+  res.status(200).json(
+    new ApiResponse(200, {
+      userId: user._id,
+      addressData: {
+        fullName: user.fullName,
+        address: user.address,
+        city: user.city,
+        district: user.district,
+        state: user.state,
+        country: user.country,
+        pinCode: user.pinCode,
+        latitude: user.latitude,
+        longitude: user.longitude,
+        isVerified: user.isVerified,
+        memberSince: user.createdAt
+      }
+    }, "User address data retrieved successfully")
   );
 });
 
@@ -430,7 +497,7 @@ const getItemsByLocation = asyncHandler(async (req, res) => {
     ...baseFilter,
     listedBy: { $in: userIds }
   })
-  .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city profilePicture points')
+  .populate('listedBy', 'username email fullName phoneNumber address state country pinCode district city latitude longitude profilePicture points isVerified createdAt')
   .sort({ createdAt: -1 });
 
   // Group results by location type for better presentation
@@ -522,7 +589,7 @@ const getItemsNearUser = asyncHandler(async (req, res) => {
           { state: { $in: locationTerms } }
         ]
       },
-      select: 'username email fullName phoneNumber address state country pinCode district city profilePicture points'
+      select: 'username email fullName phoneNumber address state country pinCode district city latitude longitude profilePicture points isVerified createdAt'
     })
     .sort({ createdAt: -1 });
 
@@ -555,4 +622,5 @@ module.exports = {
   getItemsByCity,
   getItemsByLocation,
   getItemsNearUser,
+  testUserAddress,
 };

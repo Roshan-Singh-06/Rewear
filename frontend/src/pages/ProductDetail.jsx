@@ -34,6 +34,37 @@ const ProductDetail = () => {
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
 
+  // Helper function to format complete address from seller profile
+  const formatSellerAddress = (seller) => {
+    if (!seller) return null;
+    
+    const addressParts = [];
+    
+    // Add street address
+    if (seller.address) addressParts.push(seller.address);
+    
+    // Add city/district
+    if (seller.city || seller.district) {
+      addressParts.push(seller.city || seller.district);
+    }
+    
+    // Add state
+    if (seller.state) addressParts.push(seller.state);
+    
+    // Add country with pin code
+    let countryPart = '';
+    if (seller.country) countryPart = seller.country;
+    if (seller.pinCode) countryPart += seller.country ? ` - ${seller.pinCode}` : seller.pinCode;
+    if (countryPart) addressParts.push(countryPart);
+    
+    return addressParts.length > 0 ? addressParts.join(', ') : null;
+  };
+
+  // Helper function to check if seller has complete address
+  const hasCompleteAddress = (seller) => {
+    return seller && (seller.address || seller.city || seller.district || seller.state || seller.country);
+  };
+
   // Image navigation functions
   const goToPreviousImage = () => {
     if (product?.images?.length > 1) {
@@ -58,6 +89,34 @@ const ProductDetail = () => {
       const response = await ItemService.getItemById(id);
       if (response.success) {
         setProduct(response.data);
+        
+        // Debug: Log seller's address information
+        console.log('=== FRONTEND ADDRESS DEBUG ===');
+        console.log('Seller Profile Address Information:', {
+          sellerId: response.data.listedBy?._id,
+          fullName: response.data.listedBy?.fullName,
+          address: response.data.listedBy?.address,
+          city: response.data.listedBy?.city,
+          district: response.data.listedBy?.district,
+          state: response.data.listedBy?.state,
+          country: response.data.listedBy?.country,
+          pinCode: response.data.listedBy?.pinCode,
+          latitude: response.data.listedBy?.latitude,
+          longitude: response.data.listedBy?.longitude,
+          isVerified: response.data.listedBy?.isVerified,
+          createdAt: response.data.listedBy?.createdAt
+        });
+        console.log('Address fields populated:', {
+          hasAddress: !!response.data.listedBy?.address,
+          hasCity: !!response.data.listedBy?.city,
+          hasDistrict: !!response.data.listedBy?.district,
+          hasState: !!response.data.listedBy?.state,
+          hasCountry: !!response.data.listedBy?.country,
+          hasPinCode: !!response.data.listedBy?.pinCode,
+          hasCoordinates: !!(response.data.listedBy?.latitude && response.data.listedBy?.longitude),
+          isVerified: !!response.data.listedBy?.isVerified
+        });
+        console.log('==============================');
       } else {
         setError("Product not found");
       }
@@ -320,34 +379,126 @@ const ProductDetail = () => {
                     )}
                   </div>
 
-                  {/* Complete Address Information */}
-                  <div className="space-y-2">
-                    <h5 className="font-medium text-gray-900">Address Details:</h5>
-                    
-                    {product.listedBy?.address && (
-                      <div className="flex items-center space-x-2 text-gray-600">
-                        <Home className="h-4 w-4" />
-                        <span>{product.listedBy.address}</span>
-                      </div>
-                    )}
-                    
-                    {(product.listedBy?.city || product.listedBy?.district) && (
-                      <div className="flex items-center space-x-2 text-gray-600">
-                        <Building className="h-4 w-4" />
-                        <span>
-                          {product.listedBy?.city || product.listedBy?.district}
-                          {product.listedBy?.state && <span>, {product.listedBy.state}</span>}
-                          {product.listedBy?.pinCode && <span> - {product.listedBy.pinCode}</span>}
+                  {/* Complete Address Information from Seller's Profile */}
+                  <div className="space-y-3">
+                    <h5 className="font-medium text-gray-900 flex items-center">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      Seller's Profile Address:
+                    </h5>
+                    <p className="text-xs text-gray-500 mb-2">
+                      This address is taken from the seller's profile information
+                      {hasCompleteAddress(product.listedBy) && (
+                        <span className="block mt-1 font-medium text-green-600">
+                          ✓ Complete address available
                         </span>
+                      )}
+                    </p>
+                    
+                    {/* Quick formatted address summary */}
+                    {formatSellerAddress(product.listedBy) && (
+                      <div className="bg-blue-50 border-l-4 border-blue-400 p-2 mb-3">
+                        <p className="text-sm text-blue-800 font-medium">Complete Address:</p>
+                        <p className="text-sm text-blue-700">{formatSellerAddress(product.listedBy)}</p>
                       </div>
                     )}
                     
-                    {product.listedBy?.country && (
-                      <div className="flex items-center space-x-2 text-gray-600">
-                        <MapPin className="h-4 w-4" />
-                        <span>{product.listedBy.country}</span>
+                    <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-4 border border-gray-200 space-y-3">
+                      {/* Street Address */}
+                      {product.listedBy?.address && (
+                        <div className="flex items-start space-x-3 text-gray-700">
+                          <Home className="h-5 w-5 mt-0.5 flex-shrink-0 text-blue-600" />
+                          <div className="flex-1">
+                            <span className="font-medium text-sm text-gray-600 block">Street Address:</span>
+                            <p className="text-gray-800 mt-1 leading-relaxed">{product.listedBy.address}</p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* City/District and State */}
+                      {(product.listedBy?.city || product.listedBy?.district || product.listedBy?.state) && (
+                        <div className="flex items-start space-x-3 text-gray-700">
+                          <Building className="h-5 w-5 mt-0.5 flex-shrink-0 text-green-600" />
+                          <div className="flex-1">
+                            <span className="font-medium text-sm text-gray-600 block">City/District & State:</span>
+                            <p className="text-gray-800 mt-1">
+                              {product.listedBy?.city || product.listedBy?.district}
+                              {product.listedBy?.state && (
+                                <span>, {product.listedBy.state}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* PIN Code */}
+                        {product.listedBy?.pinCode && (
+                          <div className="flex items-start space-x-3 text-gray-700">
+                            <MapPin className="h-5 w-5 mt-0.5 flex-shrink-0 text-red-600" />
+                            <div className="flex-1">
+                              <span className="font-medium text-sm text-gray-600 block">PIN Code:</span>
+                              <p className="text-gray-800 mt-1 font-mono bg-white px-2 py-1 rounded text-sm inline-block">
+                                {product.listedBy.pinCode}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Country */}
+                        {product.listedBy?.country && (
+                          <div className="flex items-start space-x-3 text-gray-700">
+                            <MapPin className="h-5 w-5 mt-0.5 flex-shrink-0 text-purple-600" />
+                            <div className="flex-1">
+                              <span className="font-medium text-sm text-gray-600 block">Country:</span>
+                              <p className="text-gray-800 mt-1">{product.listedBy.country}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                      
+                      {/* GPS Coordinates (if available) */}
+                      {(product.listedBy?.latitude && product.listedBy?.longitude) && (
+                        <div className="flex items-start space-x-3 text-gray-700 pt-2 border-t border-gray-200">
+                          <MapPin className="h-5 w-5 mt-0.5 flex-shrink-0 text-orange-600" />
+                          <div className="flex-1">
+                            <span className="font-medium text-sm text-gray-600 block">GPS Coordinates:</span>
+                            <p className="text-gray-800 mt-1 font-mono text-sm">
+                              {product.listedBy.latitude.toFixed(6)}, {product.listedBy.longitude.toFixed(6)}
+                            </p>
+                            <button 
+                              onClick={() => window.open(`https://maps.google.com/?q=${product.listedBy.latitude},${product.listedBy.longitude}`, '_blank')}
+                              className="text-blue-600 hover:text-blue-800 text-sm mt-1 underline"
+                            >
+                              View on Google Maps
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Show fallback message if no address information is available */}
+                      {!product.listedBy?.address && !product.listedBy?.city && !product.listedBy?.district && 
+                       !product.listedBy?.state && !product.listedBy?.pinCode && !product.listedBy?.country && (
+                        <div className="flex items-center justify-center space-x-2 text-gray-500 py-4">
+                          <MapPin className="h-5 w-5" />
+                          <span className="italic">Address information not provided by seller</span>
+                        </div>
+                      )}
+                      
+                      {/* Profile Verification Status */}
+                      <div className="flex items-center justify-between pt-2 mt-2 border-t border-gray-200">
+                        <div className="flex items-center space-x-2">
+                          <Shield className={`h-4 w-4 ${product.listedBy?.isVerified ? 'text-green-600' : 'text-yellow-600'}`} />
+                          <span className={`text-sm font-medium ${product.listedBy?.isVerified ? 'text-green-700' : 'text-yellow-700'}`}>
+                            {product.listedBy?.isVerified ? 'Verified Profile' : 'Profile Pending Verification'}
+                          </span>
+                        </div>
+                        {product.listedBy?.createdAt && (
+                          <span className="text-xs text-gray-500">
+                            Member since {new Date(product.listedBy.createdAt).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   
                   {/* User Stats */}

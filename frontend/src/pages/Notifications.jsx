@@ -49,8 +49,15 @@ export default function Notifications() {
     refreshInterval: 30000
   });
 
-  // Filter notifications based on selected tab
+  // Filter notifications based on selected tab - exclude transaction notifications
   const filteredNotifications = notifications.filter(notification => {
+    // First filter: only allow feedback and swap-related notifications
+    const allowedTypes = ['feedback_received', 'feedback_request', 'swap_request', 'swap_accepted', 'swap_rejected', 'swap_completed'];
+    if (!allowedTypes.includes(notification.type)) {
+      return false;
+    }
+
+    // Second filter: apply tab-specific filtering
     switch (selectedTab) {
       case 'unread':
         return !notification.isRead;
@@ -60,11 +67,9 @@ export default function Notifications() {
         return notification.type === 'swap_accepted';
       case 'swap_rejected':
         return notification.type === 'swap_rejected';
-      case 'transactions':
-        return ['points_purchase_request', 'points_purchase_accepted', 'points_purchase_rejected', 'item_received_confirmation', 'feedback_received', 'feedback_request'].includes(notification.type);
       case 'feedback':
         return ['feedback_received', 'feedback_request'].includes(notification.type);
-      default:
+      default: // 'all' case
         return true;
     }
   });
@@ -148,30 +153,55 @@ export default function Notifications() {
   }, [deleteNotification]);
 
   /**
-   * Handle opening feedback modal - Simplified version
+   * Handle opening feedback modal - For feedback and swap notifications
    */
   const handleOpenFeedback = useCallback(async (notificationId, event) => {
     event.stopPropagation();
     
     try {
-      // Create a mock transaction object from notification data
+      // Find the notification
       const notification = notifications.find(n => n._id === notificationId);
       if (!notification) {
         throw new Error('Notification not found');
       }
 
-      // Create transaction object with notification data
-      const transaction = {
-        _id: notification._id,
-        seller: notification.sender || { _id: 'unknown', fullName: 'Unknown User' },
-        item: notification.relatedItem || { 
-          _id: 'item-' + notification._id,
-          title: 'Item from notification',
-          category: 'General'
-        },
-        pointsOffered: 50, // Default points
-        status: 'pending'
-      };
+      // Check if this is a feedback-related or swap notification
+      if (!['feedback_request', 'feedback_received', 'swap_accepted'].includes(notification.type)) {
+        throw new Error('This notification does not support feedback');
+      }
+
+      let transaction;
+
+      if (notification.type === 'swap_accepted') {
+        // For swap_accepted notifications, create transaction data from swap info
+        transaction = {
+          _id: notification._id,
+          type: notification.type,
+          data: {
+            transactionId: notification.relatedSwap,
+            transactionType: 'swap'
+          },
+          seller: notification.sender || { _id: 'unknown', fullName: 'Unknown User' },
+          item: notification.relatedItem || { 
+            _id: 'swap-item',
+            title: 'Swap Item',
+            category: 'Swap'
+          }
+        };
+      } else {
+        // For feedback notifications, use existing data structure
+        transaction = {
+          _id: notification._id,
+          type: notification.type,
+          data: notification.data, // Contains transactionId, transactionType, etc.
+          seller: notification.sender || { _id: 'unknown', fullName: 'Unknown User' },
+          item: { 
+            _id: 'feedback-item',
+            title: `Feedback for ${notification.data?.transactionType || 'transaction'}`,
+            category: 'Feedback'
+          }
+        };
+      }
       
       setFeedbackModal({ isOpen: true, transaction });
     } catch (error) {
@@ -234,14 +264,8 @@ export default function Notifications() {
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       case 'swap_rejected':
         return <XCircle className="h-5 w-5 text-red-500" />;
-      case 'points_purchase_request':
-        return <Bell className="h-5 w-5 text-purple-500" />;
-      case 'points_purchase_accepted':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'points_purchase_rejected':
-        return <XCircle className="h-5 w-5 text-red-500" />;
-      case 'item_received_confirmation':
-        return <CheckCircle className="h-5 w-5 text-blue-500" />;
+      case 'swap_completed':
+        return <CheckCircle className="h-5 w-5 text-purple-500" />;
       case 'feedback_received':
         return <Star className="h-5 w-5 text-yellow-500" />;
       case 'feedback_request':
@@ -367,12 +391,11 @@ export default function Notifications() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex space-x-8 overflow-x-auto py-4">
             {[
-              { key: 'all', label: 'All', count: notifications.length },
+              { key: 'all', label: 'All', count: notifications.filter(n => ['feedback_received', 'feedback_request', 'swap_request', 'swap_accepted', 'swap_rejected'].includes(n.type)).length },
               { key: 'unread', label: 'Unread', count: unreadCount },
               { key: 'swap_accepted', label: 'Accepted', count: notifications.filter(n => n.type === 'swap_accepted').length },
               { key: 'swap_requests', label: 'Requests', count: notifications.filter(n => n.type === 'swap_request').length },
               { key: 'feedback', label: 'Feedback', count: notifications.filter(n => ['feedback_received', 'feedback_request'].includes(n.type)).length },
-              { key: 'transactions', label: 'Transactions', count: notifications.filter(n => ['points_purchase_request', 'points_purchase_accepted', 'points_purchase_rejected', 'item_received_confirmation', 'feedback_received', 'feedback_request'].includes(n.type)).length },
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -518,12 +541,12 @@ export default function Notifications() {
                           </button>
                         )}
 
-                        {/* Give Feedback Button - Only show for feedback_request notifications when user hasn't given feedback yet */}
+                        {/* Give Feedback Button - Show for feedback_request notifications when user hasn't given feedback yet */}
                         {notification.type === 'feedback_request' && !notification.feedbackGiven && (
                           <button
                             onClick={(e) => handleOpenFeedback(notification._id, e)}
                             className="inline-flex items-center px-2 py-1 border border-transparent text-xs leading-2 font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 transition-colors"
-                            title="Give feedback for this swap"
+                            title="Give feedback for this transaction"
                           >
                             <Star className="h-3 w-3 mr-1" />
                             Give Feedback
@@ -535,29 +558,16 @@ export default function Notifications() {
                           <div className="inline-flex items-center px-2 py-1 text-xs leading-4 font-medium text-green-700 bg-green-100 rounded-md">
                             <Star className="h-3 w-3 mr-1" />
                             Feedback Given
-                          
                           </div>
                         )}
 
-                        {/* Swap Completed Indicator - Show when both feedbacks are complete */}
-                        {notification.swapCompleted && (
-                          <div className="inline-flex items-center px-2 py-1 text-xs leading-4 font-medium text-purple-700 bg-purple-100 rounded-md">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Swap Completed
+                        {/* Feedback Received Indicator - Show for feedback_received notifications */}
+                        {notification.type === 'feedback_received' && (
+                          <div className="inline-flex items-center px-2 py-1 text-xs leading-4 font-medium text-blue-700 bg-blue-100 rounded-md">
+                            <Star className="h-3 w-3 mr-1" />
+                            Feedback Received
                           </div>
                         )}
-
-                        {/* Waiting for Other User's Feedback - Show when current user gave feedback but other didn't */}
-                        {notification.feedbackGiven && !notification.counterFeedbackGiven && !notification.swapCompleted && 
-                         ['swap_accepted', 'feedback_request'].includes(notification.type) && (
-                          <div className="inline-flex items-center px-2 py-1 text-xs leading-4 font-medium text-yellow-700 bg-yellow-100 rounded-md">
-                            <Clock className="h-3 w-3 mr-1" />
-                            Waiting for their feedback
-                          </div>
-                        )}
-
-                        {/* Debug notification data in development */}
-                    
 
                       </div>
                     </div>

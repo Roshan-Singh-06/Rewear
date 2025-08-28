@@ -71,6 +71,11 @@ const NotificationSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Data field for storing notification-specific information
+    data: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
   },
   { timestamps: true }
 );

@@ -55,18 +55,35 @@ const FeedbackModal = ({ isOpen, onClose, transaction, onFeedbackSubmitted }) =>
     setError('');
 
     try {
-      // Call backend to submit simple feedback using notification ID
-      if (transaction && transaction._id) {
-        console.log('Submitting feedback for notification:', transaction._id, 'with condition:', selectedCondition);
+      // Check notification type first to determine which system to use
+      if (transaction && transaction.type === 'swap_accepted') {
+        // Legacy system: Use notification ID for swap_accepted notifications
+        console.log('Submitting legacy feedback for notification:', transaction._id, 'condition:', selectedCondition);
         
-        const result = await transactionService.submitFeedbackSimple(transaction._id, selectedCondition);
+        const result = await transactionService.submitFeedbackFromNotification(transaction._id, selectedCondition);
+        console.log('Legacy feedback submission result:', result);
+        
+        onFeedbackSubmitted(result.data.pointsAwarded);
+        onClose();
+        setSelectedCondition('');
+      } else if (transaction && transaction.data && transaction.data.transactionId && transaction.data.transactionType && transaction.type !== 'swap_accepted') {
+        // New system: Use transaction data (for future order-based transactions)
+        const { transactionId, transactionType } = transaction.data;
+        
+        if (!transactionId || !transactionType) {
+          throw new Error('Missing transaction information');
+        }
+        
+        console.log('Submitting feedback for transaction:', transactionId, 'type:', transactionType, 'condition:', selectedCondition);
+        
+        const result = await transactionService.submitFeedbackSimple(transactionId, transactionType, selectedCondition);
         console.log('Feedback submission result:', result);
         
         onFeedbackSubmitted(result.data.pointsAwarded);
         onClose();
         setSelectedCondition('');
       } else {
-        throw new Error('Invalid transaction data');
+        throw new Error('Invalid transaction data or notification type');
       }
     } catch (error) {
       console.error('Feedback submission error:', error);
