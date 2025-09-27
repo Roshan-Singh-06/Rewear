@@ -1,14 +1,14 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: 'http://localhost:5001/api',"https://rewear-r2vt.onrender.com",
-  TIMEOUT: 10000,
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:5001/api',
+  TIMEOUT: import.meta.env.VITE_API_TIMEOUT || 10000,
   
   // Environment-specific configurations
   DEVELOPMENT: {
-    BASE_URL: 'http://localhost:5001/api',"https://rewear-r2vt.onrender.com",
+    BASE_URL: 'http://localhost:5001/api',
   },
   PRODUCTION: {
-    BASE_URL: 'https://your-production-api.com/api',"https://rewear-r2vt.onrender.com",
+    BASE_URL: import.meta.env.VITE_API_URL || 'https://rewear-r2vt.onrender.com/api',
   }
 };
 
@@ -70,6 +70,6 @@ export const API_ENDPOINTS = {
 
 // Get current environment configuration
 export const getCurrentConfig = () => {
-  const env = import.meta.env.MODE || 'development';
+  const env = import.meta.env.VITE_APP_ENV || import.meta.env.MODE || 'development';
   return env === 'production' ? API_CONFIG.PRODUCTION : API_CONFIG.DEVELOPMENT;
 };
