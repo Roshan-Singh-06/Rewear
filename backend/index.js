@@ -42,6 +42,8 @@ app.set('io', io);
 app.use(
   Cors({
     origin: [
+       "rewear-l14f.vercel.app",
+      "rewear-blue.vercel.app",
       "http://localhost:5173", // Vite default
       "http://localhost:5174", // Alternative Vite port
       "http://localhost:5001", // Backend port for testing
