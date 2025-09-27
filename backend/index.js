@@ -24,8 +24,10 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      "rewear-l14f.vercel.app",
-      "rewear-blue.vercel.app",
+      "https://rewear-l14f.vercel.app",
+      "https://rewear-blue.vercel.app",
+      "https://rewear-46vt.vercel.app", 
+      "https://rewear-qoti.vercel.app", // Current Vercel deployment
       "http://localhost:5173", // Vite default
       "http://localhost:5174", // Alternative Vite port
       "http://localhost:5001", // Backend port for testing
@@ -42,8 +44,9 @@ app.set('io', io);
 app.use(
   Cors({
     origin: [
-       "rewear-l14f.vercel.app",
-      "rewear-blue.vercel.app",
+      "https://rewear-l14f.vercel.app",
+      "https://rewear-blue.vercel.app",
+      "https://rewear-46vt.vercel.app", // Current Vercel deployment
       "http://localhost:5173", // Vite default
       "http://localhost:5174", // Alternative Vite port
       "http://localhost:5001", // Backend port for testing
