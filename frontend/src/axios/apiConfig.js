@@ -1,14 +1,14 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: 'http://localhost:5001/api',
+  BASE_URL: 'http://localhost:5001/api',"https://rewear-r2vt.onrender.com",
   TIMEOUT: 10000,
   
   // Environment-specific configurations
   DEVELOPMENT: {
-    BASE_URL: 'http://localhost:5001/api',
+    BASE_URL: 'http://localhost:5001/api',"https://rewear-r2vt.onrender.com",
   },
   PRODUCTION: {
-    BASE_URL: 'https://your-production-api.com/api',
+    BASE_URL: 'https://your-production-api.com/api',"https://rewear-r2vt.onrender.com",
   }
 };
 
